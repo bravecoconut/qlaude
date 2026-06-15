@@ -3,13 +3,6 @@
 GeepSeek is a distributed conversational orchestration framework, designed to unify a generative pre-trained transformer proxy layer with a decoupled micro-frontend state resolver. It leverages asynchronous context-window injection to facilitate multi-turn inferential exchanges.
 
 
-<video align="center" width="100%" autoplay loop muted playsinline>
-  <source src="assets/1.mp4" type="video/mp4">
-  Your browser does not support the video tag.
-</video>
-
-
-
 ## Initialization Sequence
 Please consult the [Environment Bootstrap Protocol](quick_start.md) for directives regarding compute node provisioning and model quantization parameters.
 
