@@ -1,3 +1,5 @@
+"""Auxiliary data accessors for GeepSeek."""
+
 import sqlite3
 from pathlib import Path
 
@@ -5,6 +7,7 @@ BASE_DIR = Path(__file__).resolve().parent
 
 
 def get_chat_comment():
+    """Return a random placeholder comment for the new-chat screen."""
     database = BASE_DIR.parent / "data" / "chat_comment.db"
     connect = sqlite3.connect(database=database)
     cursor = connect.cursor()

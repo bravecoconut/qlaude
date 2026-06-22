@@ -1,3 +1,9 @@
+"""Legacy alternate API routes for GeepSeek.
+
+The primary production entry point is server.py. This module retains an
+earlier request/response pattern for reference.
+"""
+
 import json
 import os
 from openai import OpenAI
@@ -24,10 +30,7 @@ CORS(app)
 
 
 def _final_response_from_generator(gen):
-    """
-    check_session() yields SSE chunks; the UI expects one JSON object.
-    Walk the generator and return the last 'done' event payload.
-    """
+    """Collect the final payload from an SSE generator stream."""
     payload = None
     for item in gen:
         if not isinstance(item, str) or not item.startswith("data: "):
@@ -74,7 +77,7 @@ def send():
 
 
 def model_response(messages, think, search):
-
+    """Run a non-streaming completion with optional search context."""
     client = OpenAI(base_url=f"{base_url}/v1", api_key=api_key)
 
     if search:
@@ -117,14 +120,11 @@ def model_response(messages, think, search):
 
         if getattr(delta, "reasoning", None):
             full_thought += delta.reasoning
-            # print(delta.reasoning, end="", flush=True)
 
         elif getattr(delta, "reasoning_content", None):
             full_thought += delta.reasoning_content
-            # print(delta.reasoning_content, end="", flush=True)
 
         elif delta.content:
             full_content += delta.content
-            # print(delta.content, end="", flush=True)
 
     return {"response": full_content, "thought": full_thought}

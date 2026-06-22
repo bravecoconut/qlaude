@@ -1,5 +1,10 @@
+/**
+ * GeepSeek client application.
+ *
+ * Manages session list, conversation history, feature toggles, and SSE
+ * streaming from the API server (port 5000).
+ */
 
-// app/client/static/app.js
 let active_session = "", think = false, search = false, file = "";
 
 
@@ -7,39 +12,32 @@ let textArea = () => {
     let myTextarea = document.getElementById('get_input');
     const myDiv = document.getElementById('send_input');
 
-    // Safety check to ensure elements exist
     if (!myTextarea || !myDiv) return;
 
-    // Create a reusable helper function for the styling logic
+    // Disable send button when input is empty
     const checkInput = () => {
         if (!myTextarea.value.trim()) {
             myDiv.style.pointerEvents = 'none';
             myDiv.style.color = '#000000';
             myDiv.style.backgroundColor = '#ffffffb6'
-            myDiv.style.opacity = '0.5'; // Optional visual hint for disabled state
+            myDiv.style.opacity = '0.5';
         } else {
-            myDiv.style.pointerEvents = 'auto'; // Re-enable pointer clicks
-            myDiv.style.color = '#000000';   // Restore solid background color
+            myDiv.style.pointerEvents = 'auto';
+            myDiv.style.color = '#000000';
             myDiv.style.backgroundColor = '#ffffff'
             myDiv.style.opacity = '1';
         }
 
-        // --- DYNAMIC HEIGHT LOGIC ---
-        // Reset height to base line height first to measure deletion correctly
+        // Auto-resize textarea to fit content
         myTextarea.style.height = '24px';
 
-        // Capture new content depth and apply it directly
         let newHeight = myTextarea.scrollHeight;
         myTextarea.style.height = newHeight + 'px';
 
-        // markdown if user does
         marked.parse(myTextarea.value)
     };
 
-    // 1. Run it immediately on page load
     checkInput();
-
-    // 2. Run it every time the user types
     myTextarea.addEventListener('input', checkInput);
 }
 
@@ -47,6 +45,7 @@ let textArea = () => {
 
 
 class UIMAN {
+    /** Toggle sidebar visibility and layout padding. */
     sideButton() {
         if (document.getElementById('upper_nav').style.visibility === 'visible') {
             document.getElementById('sideBar').style.width = '231px'
@@ -78,6 +77,7 @@ class UIMAN {
 
     }
 
+    /** Start a new chat and reset the URL. */
     new_chat_button() {
         active_session = ""
         window.history.pushState({}, "", `/chat/new`);
@@ -90,6 +90,7 @@ class UIMAN {
     }
 
 
+    /** Toggle extended reasoning (GeepThink) mode. */
     think_toggle() {
 
         if (think == false) {
@@ -109,6 +110,7 @@ class UIMAN {
     }
 
 
+    /** Toggle web search mode. */
     search_toggle() {
 
         if (search == false) {
@@ -132,57 +134,27 @@ class UIMAN {
         settings_button = document.getElementById('setting-toggle')
     }
 
-
-    // async blank_screen_comment_man() {
-    //     // check if active session is False not True
-    //     if (!active_session) {
-    //         const res = await fetch("http://127.0.0.1:5000/api/chat_blank_comment");
-    //         const comment = await res.json();
-
-    //         const conversation_container = document.getElementById("conversation_con")
-    //         conversation_container.innerHTML = `
-    //             <div id="new_chat_comment">
-    //                 <p>${comment}</p>
-    //             </div>
-    //         `
-    //     } else {
-    //         conversation_container.innerHTML = ""
-    //     }
-    // }
-
-    // async show_url_card() {
-    //     element = event.targer
-    //     // check if active session is False not True
-    //     if (!active_session) {
-    //         const res = await fetch(element.href);
-    //         const comment = await res.json();
-
-
-    //     } else {
-    //         conversation_container.innerHTML = ""
-    //     }
-    // }
-
 }
 
 uiman = new UIMAN()
 
 
 class SessionMan {
-    // get session pairs in json
+    /** Fetch all sessions from the API. */
     async load_all_sessions_pairs() {
         const res = await fetch("http://127.0.0.1:5000/api/sessions");
         this.sessionPairs = await res.json();
         return this.sessionPairs;
     }
 
+    /** Render session names in the sidebar, newest first. */
     list_sessions_in_cat() {
         console.log(this.sessionPairs);
-    if (!this.sessionPairs || typeof this.sessionPairs !== 'object') return; // ✅ guard
+    if (!this.sessionPairs || typeof this.sessionPairs !== 'object') return;
     const cat_element = document.getElementById('cat');
         cat_element.innerHTML = ""
 
-        // sort by date_last_commit descending (newest first)
+        // Sort by most recently updated
         const sorted = Object.entries(this.sessionPairs).sort((a, b) => {
             return new Date(b[1].date_last_commit) - new Date(a[1].date_last_commit);
         });
@@ -223,7 +195,6 @@ class ConversationMan {
 
     async load_conversations_in_conversation_con(element) {
         active_session = element.id
-        // ✅ just update the URL without reloading
         window.history.pushState({}, "", `/chat/${active_session}`);
 
         console.log(active_session);
@@ -314,6 +285,7 @@ conversationMan = new ConversationMan()
 
 class SendMan {
 
+    /** Send a message and stream the assistant response via SSE. */
     async chat() {
 
 
@@ -340,9 +312,8 @@ class SendMan {
             conversation_container.innerHTML = ""
         }
 
-        let buffer = ""; // accumulate bytes across chunks (handles split SSE lines)
+        let buffer = ""; // SSE frames may split across chunks
 
-        // Accumulate raw text outside the loop
         let fullContent = "";
         let fullThought = "";
         let thoughtsClosed = false;
@@ -439,30 +410,12 @@ class SendMan {
                         }
                     }
 
-                    // if (payload.sources) {
-
-                    //     const summary = document.getElementById(`search-summary-${now}`)
-                    //     if (summary) {
-                    //         summary.innerText = "Sources"
-                    //         summary.classList.remove('status-indicator');
-                    //     }
-
-                    //     searchContent = document.getElementById(`search-content-${now}`)
-
-                    //     sources = payload.sources
-                    //     console.log(sources);
-                    //     sources.forEach(source => {
-                    //         searchContent.innerHTML += `<a href="${source.url}" target="_blank">${source.title}</a>`
-                    //     });
-                    // }
-
                     if (payload.sources) {
                         console.log("source: ", payload.sources.url);
 
-                        // add regex here
+                        // Display hostname as link label
                         let source_domain = payload.sources.url;
                         if (source_domain) {
-                            // Matches http(s):// and/or www. and captures everything up to the next slash
                             const match = source_domain.match(/^(?:https?:\/\/)?(?:www\.)?([^\/\?#]+)/i);
                             source_domain = (match && match[1]) ? match[1] : source_domain;
                         }
@@ -515,29 +468,25 @@ class SendMan {
 
 const sendMan = new SendMan();
 
-// At the bottom of app.js, after all classes are defined
 document.addEventListener("DOMContentLoaded", async () => {
     await get_all_sessions_pairs();
 
     if (SESSION_ID_FROM_URL && SESSION_ID_FROM_URL !== "None" && SESSION_ID_FROM_URL !== "new") {
-        // ✅ real session — load it
         active_session = SESSION_ID_FROM_URL;
         await conversationMan.load_conversations_in_conversation_con({ id: active_session });
     } else {
-        // ✅ new chat — just show the comment
         document.getElementById("conversation_con").innerHTML = `<div id="new_chat_comment"><p>Ask anything!</p></div>`;
     }
 });
 
 window.addEventListener("popstate", async () => {
-    const path = window.location.pathname;  // e.g. "/chat/abc123"
+    const path = window.location.pathname;
     const session_id = path.split("/chat/")[1];
 
     if (session_id && session_id !== "new") {
         active_session = session_id;
         await conversationMan.load_conversations_in_conversation_con({ id: active_session });
     } else {
-        // navigated back to a "new chat" or root state
         active_session = "";
         document.getElementById("conversation_con").innerHTML = `<div id="new_chat_comment"><p>Ask anything!</p></div>`;
     }

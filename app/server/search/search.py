@@ -1,4 +1,8 @@
-# search.py — web/site scrape search used by the model via build_search_tools()
+"""Web search and page extraction tools for GeepSeek.
+
+Provides DuckDuckGo queries, page scraping, and section-based extraction.
+Registered with the LLM through build_search_tools().
+"""
 
 import time
 import re
@@ -9,28 +13,24 @@ import trafilatura
 from trafilatura.settings import use_config
 from bs4 import BeautifulSoup
 
-# Configure trafilatura with a 5-second timeout to prevent hangs
+# Trafilatura download timeout (seconds)
 _trafilatura_config = use_config()
 _trafilatura_config.set("DEFAULT", "DOWNLOAD_TIMEOUT", "5")
 
-# spaCy is loaded on first use (keeps import fast if search is disabled)
+# Lazy-loaded spaCy model (avoids import cost when search is disabled)
 _nlp = None
 
-# ---------------------------------------------------------------------------
-# Configuration
-# ---------------------------------------------------------------------------
-
-# Limits so tool responses stay within model context
+# Response size limits (keep tool output within model context)
 MAX_RESULTS_CAP = 5
 EXCERPT_MAX_CHARS = 12_000
 EXCERPT_MAX_SENTENCES = 30
 SNIPPET_QUERY_MAX = 5
 NEWS_QUERY_MAX = 4
 
-# Network robustness
+# DuckDuckGo retry policy
 DDG_MAX_RETRIES = 2
-DDG_RETRY_BASE_DELAY = 1.0  # seconds; doubles each retry
-FETCH_TIMEOUT = 15  # seconds for trafilatura downloads
+DDG_RETRY_BASE_DELAY = 1.0
+FETCH_TIMEOUT = 15
 
 
 def _get_nlp():

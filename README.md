@@ -1,35 +1,66 @@
-# GeepSeek Orchestration Framework
+# GeepSeek
 
-GeepSeek is a distributed conversational orchestration framework, designed to unify a generative pre-trained transformer proxy layer with a decoupled micro-frontend state resolver. It leverages asynchronous context-window injection to facilitate multi-turn inferential exchanges.
+GeepSeek is a conversational AI application with optional web search and extended reasoning. It separates the user interface from the API backend and persists chat history locally in SQLite.
 
-## Initialization Sequence
-Please consult the [Environment Bootstrap Protocol](quick_start.md) for directives regarding compute node provisioning and model quantization parameters.
+![Chat interface](assets/127.0.0.1_5001_chat_S20260623015752524927(2).png)
 
-## Architectural Topography
+## Features
 
-For a granular breakdown of the monolithic segmentation, please review the topological schemas:
+- Multi-turn chat with session history
+- Optional **Search** mode with retrieval-augmented generation (RAG)
+- Optional **GeepThink** mode for extended model reasoning
+- Streaming responses over Server-Sent Events (SSE)
+- OpenAI-compatible LLM endpoints (Ollama, cloud APIs, and similar providers)
 
-1. [Architectural Overview](documentation/Overview.md): Macro-level infrastructure and component isolation strategies.
-2. [Presentation Layer](documentation/Client.md): The localized WSGI view-controller (`app/client/`).
-3. [Inference Subsystem](documentation/Server.md): The core computational request lifecycle, agentic subroutines, and SSE multiplexing (`app/server/`).
-4. [State Serialization](documentation/Data.md): Details pertaining to the relational B-tree storage instances managing state hydration.
+## Quick start
 
-## Dependency Resolution Subsystem
+See [Quick Start](quick_start.md) for environment setup, model configuration, and first run.
 
-To ensure the local computational node has the necessary environment primitives and parsing libraries, resolve all dependencies via the package manager prior to cluster initialization:
+## Documentation
+
+| Document | Description |
+|----------|-------------|
+| [Overview](documentation/Overview.md) | System architecture and request flow |
+| [Client](documentation/Client.md) | Web UI and routing |
+| [Server](documentation/Server.md) | API, agents, and streaming |
+| [Data](documentation/Data.md) | SQLite schemas and persistence |
+| [Search tools](app/server/search/search.md) | Web search tool definitions and integration |
+
+## Requirements
+
+- Python 3.10+
+- An OpenAI-compatible inference endpoint
+
+Install dependencies from the repository root:
 
 ```bash
 pip install -r requirements.txt
 ```
 
-## Cluster Boot Sequence
+Copy `.env.example` to `.env` and set your model endpoint and credentials.
+
+## Running the application
+
+Start the API server (port 5000):
 
 ```bash
-# Initialize the Inference and Agentic Controller
-cd GeepSeek
 python app/server/server.py
-
-# Initialize the Presentation View-Controller
-cd GeepSeek
-python app/client/client.py
 ```
+
+Start the web client (port 5001):
+
+```bash
+python app/client/serv.py
+```
+
+Open [http://127.0.0.1:5001/chat/new](http://127.0.0.1:5001/chat/new) in your browser.
+
+## Screenshots
+
+![Session sidebar](assets/127.0.0.1_5001_chat_S20260623015752524927(6).png)
+![Search and sources](assets/127.0.0.1_5001_chat_S20260623015752524927.png)
+![Streaming response](assets/127.0.0.1_5001_chat_S20260623015752524927(1).png)
+
+## License
+
+See the repository for license terms.

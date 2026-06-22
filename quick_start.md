@@ -1,25 +1,33 @@
-# Environment Bootstrap Protocol
+# Quick Start
 
-## 1. Compute Node Provisioning (Kaggle Tensor Accelerators)
+This guide covers model hosting, environment configuration, and running GeepSeek locally.
 
-Execute the following POSIX-compliant bootstrap sequence within the target accelerator environment to allocate the necessary GPU buffers and inject the underlying compression binaries.
+## 1. Model hosting (optional: Kaggle GPU)
 
-### Dependency Injection
+If you do not already have an OpenAI-compatible endpoint, you can run Ollama on a GPU environment such as Kaggle.
+
+### Install dependencies
+
 ```bash
-!apt-get update && apt-get install -y zstd
+apt-get update && apt-get install -y zstd
 ```
 
-### Binary Resolution and Expansion
+### Install Ollama
+
 ```bash
-!curl -fsSL https://ollama.com/download/ollama-linux-amd64.tar.zst -o ollama.tar.zst
-!tar -xvf ollama.tar.zst -C /usr
-!ollama --version
+curl -fsSL https://ollama.com/download/ollama-linux-amd64.tar.zst -o ollama.tar.zst
+tar -xvf ollama.tar.zst -C /usr
+ollama --version
 ```
 
-### Daemon Initialization via Subprocess Orchestration
-Execute the following wrapper to daemonize the inference server and detach it from the main execution thread, binding it to the wildcard interface:
+### Start the Ollama server
+
+Run Ollama as a background process and bind it to all interfaces:
+
 ```python
-import subprocess, os, time
+import subprocess
+import os
+import time
 
 env = os.environ.copy()
 env["OLLAMA_MODELS"] = "/kaggle/working/ollama_models"
@@ -28,54 +36,79 @@ env["OLLAMA_HOST"] = "0.0.0.0"
 log = open("ollama.log", "w")
 process = subprocess.Popen(
     ["/usr/bin/ollama", "serve"],
-    env=env, stdout=log, stderr=log
+    env=env,
+    stdout=log,
+    stderr=log,
 )
 
-time.sleep(5)  # block until daemon binding completes
-print(f"Inference daemon instantiated — PID: {process.pid}")
+time.sleep(5)
+print(f"Ollama started — PID: {process.pid}")
 ```
 
-### Weights Acquisition
+### Pull a model
+
 ```bash
-!OLLAMA_HOST=0.0.0.0 ollama pull qwen3:8b
+OLLAMA_HOST=0.0.0.0 ollama pull qwen3:8b
 ```
 
-### Ingress Topology via Port Forwarding
+### Expose the endpoint (optional)
+
+Use a tunnel service if the inference host is not reachable from your machine:
+
 ```bash
-!npm install -g localtunnel
-!lt --port 11434
+npm install -g localtunnel
+lt --port 11434
 ```
 
-Persist the generated ingress endpoint URL into your environment variables (`.env` file) as the `base_url` proxy target.
+Set the tunnel URL as `BASE_URL` in your `.env` file.
 
 ---
 
-## 2. Application Cluster Boot Sequence
+## 2. Application setup
 
-Initialize the segregated client and server processes via your local interactive shell. Ensure your current working directory resolves to the repository root.
+From the repository root:
 
-First, resolve all requisite Python packages to establish the runtime environment:
+### Install Python packages
+
 ```bash
 pip install -r requirements.txt
 ```
 
-Instantiate Inference Layer:
+### Configure environment variables
+
+Copy the example file and edit values for your provider:
+
 ```bash
-cd GeepSeek
+cp .env.example .env
+```
+
+| Variable | Description |
+|----------|-------------|
+| `BASE_URL` | Base URL of your OpenAI-compatible API (no `/v1` suffix) |
+| `API_KEY` | API key or placeholder (e.g. `ollama`) |
+| `RESONNING_MODEL` | Model used when GeepThink is enabled |
+| `NON_RESONNING_MODEL` | Default model when GeepThink is disabled |
+
+### Start the services
+
+Terminal 1 — API server:
+
+```bash
 python app/server/server.py
 ```
 
-Instantiate Presentation Layer:
+Terminal 2 — web client:
+
 ```bash
-cd GeepSeek
-python app/client/client.py
+python app/client/serv.py
 ```
 
-*(Note: Depending on your system's Python alias configuration, `python3` may be required to execute the AST compiler.)*
+Use `python3` instead of `python` if required on your system.
 
 ---
 
-## 3. Subsystem Verification
+## 3. Verify the installation
 
-Navigate your standard web client to the view-controller's loopback interface:
-[http://127.0.0.1:5001/chat/new](http://127.0.0.1:5001/chat/new) to validate the end-to-end handshake.
+Open [http://127.0.0.1:5001/chat/new](http://127.0.0.1:5001/chat/new), send a message, and confirm that the response streams correctly.
+
+If Search mode is enabled, verify that source links appear in the assistant reply.

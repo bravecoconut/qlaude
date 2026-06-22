@@ -1,35 +1,69 @@
-# Persistence and State Serialization Topologies
+# Data Layer
 
-GeepSeek relies on an embedded SQL-based state engine to enforce transactional consistency across its conversational memory matrix. The schema architecture is designed for rapid local I/O operations, residing within the `app/data/` volume.
+GeepSeek stores all conversation data locally in SQLite. No external database is required.
 
-## Volume: `app/data/`
+## Location
 
-### `database.db`
-The primary entity-relationship namespace for granular conversational state vectors.
-- Implements dynamic DDL executions, instantiating isolated B-tree table structures bound to unique session UUIDs (e.g., `S20260517030614927216`).
-- Tuple structure per shard:
-  - `id`: Auto-incrementing primary sequence index.
-  - `role`: Actor designation (e.g., "user", "assistant", "system").
-  - `content`: The raw text payload.
-  - `thought`: Ephemeral neural-symbolic reasoning chains (utilized during `think` execution branching).
-  - `source`: Serialized JSON arrays containing hypermedia references accessed during tool invocation.
+**Directory:** `app/data/`
 
-### `session_info.db`
-The metadata ledger tracking macro-level session lifecycle events.
-- **Table: `info`**
-  - `session_id`: Foreign key equivalent mapping to the dynamically generated DDL structures in `database.db`.
-  - `session_name`: LLM-generated heuristic summary of the context namespace.
-  - `date_created`: Initialization timestamp schema.
-  - `date_last_commit`: Mutation timestamp reflecting the most recent tuple insertion.
+| Database | Purpose |
+|----------|---------|
+| `database.db` | Message history (one table per session) |
+| `session_info.db` | Session metadata (ID, title, timestamps) |
+| `chat_comment.db` | Optional placeholder comments for empty chat state |
 
-### `chat_comment.db`
-A secondary auxiliary datastore allocated for out-of-band telemetry and feedback aggregation nodes.
+## `database.db`
 
----
+Each chat session has its own table, named with the session ID (for example, `S20260623015752524927`).
 
-## Volume: `sql/`
-This directory encapsulates the foundational query definitions.
-- `chat_comment.sql`
-- `session_info.sql`
+### Message table schema
 
-These artifacts serve as the initial declarative schemas utilized during the application bootstrap sequence to ensure the presence of the necessary database shards before write operations commence.
+| Column | Type | Description |
+|--------|------|-------------|
+| `id` | INTEGER | Primary key, auto-increment |
+| `role` | VARCHAR | Message role: `user`, `assistant`, or `system` |
+| `content` | TEXT | Message body |
+| `thought` | TEXT | Reasoning trace when GeepThink is enabled |
+| `source` | TEXT | JSON array of search source references |
+
+Tables are created on first message for a new session.
+
+## `session_info.db`
+
+### Table: `info`
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `session_id` | VARCHAR | Unique session identifier |
+| `session_name` | VARCHAR | Display title (LLM-generated or default) |
+| `date_created` | VARCHAR | Session creation timestamp |
+| `date_last_commit` | VARCHAR | Last message timestamp |
+
+Updated on every saved turn.
+
+## `chat_comment.db`
+
+### Table: `comments`
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `comment` | VARCHAR | Short placeholder text for the new-chat screen |
+
+## Schema definitions
+
+**Directory:** `sql/`
+
+| File | Creates |
+|------|---------|
+| `session_info.sql` | `info` table in `session_info.db` |
+| `chat_comment.sql` | `comments` table in `chat_comment.db` |
+
+Run these scripts once when initializing a fresh deployment if the database files do not yet exist.
+
+## Concurrency
+
+Connections use WAL journal mode (`PRAGMA journal_mode=WAL`) to allow concurrent reads during writes.
+
+## Session ID format
+
+New sessions receive IDs in the form `S` + timestamp with microsecond precision, for example `S20260623015752524927`.

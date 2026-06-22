@@ -1,10 +1,14 @@
+"""Session and conversation persistence for GeepSeek.
+
+Manages SQLite storage for chat messages, session metadata, and
+context assembly for LLM requests.
+"""
+
 import sqlite3
 from datetime import datetime
 from pathlib import Path
 import json
 
-# from app.server.utills.utills import log
-# from app.server.search.search import
 from openai import OpenAI
 from markdown import markdown
 from dotenv import load_dotenv
@@ -15,11 +19,12 @@ now = datetime.now(pytz.timezone("Asia/Kolkata"))
 
 load_dotenv()
 
-
 BASE_DIR = Path(__file__).resolve().parent
 
 
 class GenMan:
+    """Base session manager: create sessions, load context, save messages."""
+
     def __init__(
         self,
         think=False,
@@ -30,7 +35,7 @@ class GenMan:
         model="gemini-2.5-flash",
     ):
         self.think = think
-        self.search = search  # fixed typo too
+        self.search = search
         self.session = (
             session if session else f"S{datetime.now().strftime('%Y%m%d%H%M%S%f')}"
         )
@@ -45,8 +50,6 @@ class GenMan:
 
         self.now = datetime.now()
 
-        # self.result = {}
-
         self.system_instructions = f"""
         ## Informations
         Current date: {now.strftime("%A, %B %d, %Y")},
@@ -58,24 +61,21 @@ class GenMan:
         1. If the user's query requires real-time information, news, dates, scores, or events from this month, but 'Live Search: Disabled' is active, you MUST NOT guess or hallucinate. 
     - Instead, stop immediately and output a clean message asking the user to enable the **Search** toggle so can provide latest updates based on internet, because you don't have access to searching agents until user enable **search** mode.
         2. If the user's query requires complex calculation, coding logic, deep reasoning, or debugging, but 'Think Mode: Disabled' is active:
-        - Output a clean message asking the user to enable the **Think** toggle for a better response so you can think in more detail about query.
-        3. Keep the request polite, concise, and professional. Do not add any other placeholder conversational text."""
+        - If query requires to think or the query is complicated to answer, Output a clean message asking the user to enable the **Think** toggle for a better response so you can think in more detail about query.
+        3. Keep the request polite, concise, and professional. Do not add any other placeholder conversational text.
+        4. never ask user to enable any toggle if query doesn't required realtime update or thining, such for normal greetings.
+        """
 
     def get_db(self, path):
+        """Open a SQLite connection with WAL mode for concurrent reads."""
         connect = sqlite3.connect(path, timeout=10)
-        connect.execute("PRAGMA journal_mode=WAL")  # allows concurrent reads
+        connect.execute("PRAGMA journal_mode=WAL")
         return connect
 
     def check_session(self):
+        """Ensure the session table exists; create one and register metadata if new."""
         from server import session_name_gen
 
-        """
-        it checks session exist or not, and create one and save its info.
-        """
-
-        # session_exists = None
-        # from server import send.mode
-        # check session table exist is True or False
         connect = connect = self.get_db(self.database)
         cursor = connect.cursor()
 
@@ -89,7 +89,6 @@ class GenMan:
             connect = connect = self.get_db(self.database)
             cursor = connect.cursor()
 
-            # if False, create session table
             cursor.execute(f"""
                 CREATE TABLE {self.session} (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -103,7 +102,6 @@ class GenMan:
             connect.commit()
             connect.close()
 
-            # save session info
             connect = sqlite3.connect(self.session_info)
             cursor = connect.cursor()
 
@@ -125,17 +123,12 @@ class GenMan:
             }
 
         result["session_exist"] = bool(exist)
-
         result["results"] = {"session_id": self.session}
-
-        # self.save_into_session("model", model_response(messages = self.load_contents(), think=self.think, search = self.search))
 
         return result
 
     def load_contents(self):
-        # save user input
-        # self.save_into_session("user", {'response':self.user_input, 'thought':""})
-
+        """Build the message list sent to the LLM, including system instructions."""
         contents_list = [
             {"role": "system", "content": self.system_instructions},
         ]
@@ -152,17 +145,14 @@ class GenMan:
 
         for row in rows:
             role = row[1]
-
             parts = row[2]
-
             new_part = {"role": role, "content": parts}
-
             contents_list.append(new_part)
 
         return contents_list
 
     def save_into_session(self, data):
-
+        """Persist a single message and update the session last-modified timestamp."""
         connect = connect = self.get_db(self.database)
         cursor = connect.cursor()
 
@@ -186,6 +176,7 @@ class GenMan:
         connect.close()
 
     def all_session(self):
+        """Return all sessions keyed by ID with names and timestamps."""
         session_pairs = {}
 
         connect = connect = self.get_db(self.database)
@@ -198,7 +189,6 @@ class GenMan:
         connect.commit()
         connect.close()
 
-        # get corresponding name
         connect = sqlite3.connect(self.session_info)
         cursor = connect.cursor()
 
@@ -219,27 +209,19 @@ class GenMan:
                         "date_last_commit": roww[3],
                     }
 
-        # just for curiosity!
-        # with open("test/t.json", 'w') as file:
-        #     json.dump(session_pairs, file)
-
         return session_pairs
 
 
-# Gen(user_input="what is birds? in 10 words").check_session()
-# Gen(user_input="what is fox? in 10 words", think=True, search=False).check_session()
-# Gen(user_input="what is fireFox? in 10 words", think=True).check_session()
-# Gen(user_input="what is dart? in 10 words", think=True).check_session()
-# Gen(user_input="what is python rehex? in 10 words", think=True).check_session()
-
-
 class Man(GenMan):
+    """Extended session manager that loads full records for UI display."""
+
     def __init__(self, session):
         super().__init__(session=session)
         self.session = session
         self.session_conversation = {}
 
     def load_conversation(self):
+        """Return all messages for the session, including thought and source fields."""
         contents_list = []
 
         connect = connect = self.get_db(self.database)
@@ -254,13 +236,9 @@ class Man(GenMan):
 
         for row in rows:
             id = row[0]
-
             role = row[1]
-
             content = row[2]
-
             thought = row[3]
-
             source = row[4]
 
             new_part = {
@@ -275,10 +253,3 @@ class Man(GenMan):
 
         self.session_conversation[f"{self.session}"] = contents_list
         return self.session_conversation
-
-
-# with open("w.json", 'w') as file:
-#     json.dump(Man(session='S20260517030614927216').load_conversation(), file)
-
-
-# Gen(session ='S20260516044027833344',user_input="how many color they have?", think=True, search=False).check_session()

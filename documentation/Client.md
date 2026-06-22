@@ -1,20 +1,56 @@
-# Presentation Layer and State Hydration
+# Client
 
-The client subsystem acts as a lightweight presentation execution engine, decoupled from the computationally intensive backend to ensure deterministic DOM rendering and isolated fault tolerance.
+The GeepSeek client is a Flask application that renders the chat interface and delegates all inference to the API server.
 
-## Namespace: `app/client/`
+## Entry point
 
-### `serv.py` (or `client.py`)
-The primary WSGI View-Controller daemon, mapping network requests to template render cycles. Bound to the 5001 interface.
+**File:** `app/client/serv.py`  
+**Port:** 5001
 
-**Routing Matrix:**
-- `/`: Absolute root; triggers a 302 redirect to the default initialization state.
-- `/chat/`: Intermediate alias resolver, redirecting to the instantiation node `/chat/new`.
-- `/chat/new`: Invokes the Jinja2 AST compiler against `chat.html`, injecting a null-state `session_id` to signal context reset.
-- `/chat/<session_id>`: Compiles the view template with a populated UUID token, instructing the frontend asynchronous logic to request state rehydration from the backend infrastructure.
+## Routes
 
-### `templates/`
-Houses the declarative HTML DOM schemas, awaiting server-side compilation and parameter injection prior to client transmission.
+| Route | Behavior |
+|-------|----------|
+| `/` | Redirects to `/chat/new` |
+| `/chat`, `/chat/` | Redirects to `/chat/new` |
+| `/chat/new` | New conversation; no session ID loaded |
+| `/chat/<session_id>` | Existing conversation; history loaded on page init |
 
-### `static/`
-The asset delivery volume. Serves statically compiled CSS object models, rasterized imagery, and the core asynchronous JavaScript bundles responsible for managing the bidirectional SSE streaming protocols and maintaining client-side interactivity state.
+The active session ID is injected into the page template and consumed by `app.js` on load.
+
+## Templates
+
+**Directory:** `app/client/templates/`
+
+- `chat.html` — Main chat layout: sidebar, message list, input area, and feature toggles (GeepThink, Search).
+
+Templates use Jinja2 and Flask's `url_for` helper for static asset paths.
+
+## Static assets
+
+**Directory:** `app/client/static/`
+
+| Asset | Role |
+|-------|------|
+| `app.js` | Session list, conversation loading, SSE streaming, UI toggles |
+| `styles/style_light.css` | Light theme stylesheet |
+| `styles/style_dark.css` | Dark theme stylesheet |
+| `images/` | Branding and icons |
+
+## API integration
+
+The client calls the server at `http://127.0.0.1:5000` (or `http://localhost:5000` for chat):
+
+| Endpoint | Method | Usage |
+|----------|--------|-------|
+| `/api/sessions` | GET | Populate the recent sessions sidebar |
+| `/api/load_conversation_on_session_id` | GET | Restore messages for a session |
+| `/chat` | POST | Send a message; receive SSE stream |
+
+## User controls
+
+- **New chat** — Clears the view and resets the URL to `/chat/new`.
+- **GeepThink** — Sends `think: true` to use the reasoning model.
+- **Search** — Sends `search: true` to run the search agent before generation.
+
+Markdown in messages is rendered client-side with [marked.js](https://marked.js.org/).

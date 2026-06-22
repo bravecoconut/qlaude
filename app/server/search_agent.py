@@ -1,3 +1,9 @@
+"""Search agent for GeepSeek.
+
+Invokes LLM tool calling to retrieve web content when Search mode is enabled.
+Results are structured for injection into the main chat completion.
+"""
+
 import os
 import json
 from openai import OpenAI
@@ -14,22 +20,25 @@ with open("app/server/json/tools.json", "r") as file:
 
 base_url = os.getenv("BASE_URL")
 api_key = os.getenv("API_KEY")
-model = os.getenv("MODEL")
 
+resonning_model = os.getenv("RESONNING_MODEL")
+non_resonning_model = os.getenv("NON_RESONNING_MODEL")
+model = None
 
-# 1. Initialize OpenAI client
-client = OpenAI(
-    api_key=api_key, base_url=f"{base_url}/v1"  # Optional, if using custom endpoint
-)
+if resonning_model:
+    model = resonning_model
+else:
+    model = non_resonning_model
 
-# 2. Build the actual local function callables
-# Note: build_search_tools returns: [lookup_fact, web_search, search_sites, list_page_sections, fetch_sections]
+client = OpenAI(api_key=api_key, base_url=f"{base_url}/v1")
+
+# One tool set per process; each chat request should use a fresh build_search_tools()
 local_tools = build_search_tools()
 tool_mapping = {func.__name__: func for func in local_tools}
 
 
 def search_agent(user_contents: str):
-    # Standard System Instructions instructing the model when/how to search
+    """Run the search agent on recent conversation context and return tool results."""
     system_instruction = (
         f"Current date: {now.strftime('%A, %B %d, %Y')}. "
         f"Current time: {now.strftime('%I:%M %p')} IST.\n\n"
@@ -72,13 +81,11 @@ def search_agent(user_contents: str):
 
     messages += user_contents
 
-    # print(messages)
-
     print(f"User Question: \n{messages[-1]['content']}\n")
 
-    # Step 1: Send initial request to model with tool schemas
+    # Step 1: Request tool selection from the model
     response = client.chat.completions.create(
-        model=model,  # or your desired model
+        model=model,
         messages=messages,
         tools=OPENAI_SEARCH_TOOLS,
         tool_choice="auto",
@@ -87,7 +94,7 @@ def search_agent(user_contents: str):
     response_message = response.choices[0].message
     messages.append(response_message.model_dump(exclude_none=True))
 
-    # Step 2: Check if the model wants to call a tool
+    # Step 2: Execute any tool calls returned by the model
     if response_message.tool_calls:
         print("--- model decided to call a tool ---")
         for tool_call in response_message.tool_calls:
@@ -97,25 +104,20 @@ def search_agent(user_contents: str):
             print(f"tool to call: {function_name}")
             print(f"arguments: {json.dumps(function_args, indent=2)}")
 
-            # Find matching local python function
             local_func = tool_mapping.get(function_name)
             if local_func:
                 try:
-                    # Execute local search tool
                     tool_result = local_func(**function_args)
                 except Exception as e:
                     tool_result = {"error": str(e)}
             else:
                 tool_result = {"error": f"Function '{function_name}' not found."}
 
-            # Print a snippet of the search tool output
             print(f"tool output fetched! keys: {list(tool_result.keys())}")
             if "instant_snippets" in tool_result and tool_result["instant_snippets"]:
                 print(
                     f"top Snippet title: {tool_result['instant_snippets'][0].get('title')}"
                 )
-
-            # Append the tool response to messages
 
             content = {
                 "tool": function_name,
@@ -131,20 +133,10 @@ def search_agent(user_contents: str):
                 "content": json.dumps(content),
             }
 
-            # print(results)
-
             messages.append(results)
 
-        # Step 3: Get final model response with search data injected
         print("\n--- sending results from model")
 
         return results
     else:
         return "their is nothing to search in this query, reply by your Own."
-
-
-# if __name__ == "__main__":
-#     # Example 1: Current Event / Factual Search
-#     ans = search_agent("Who is currently leading the IPL 2026 points table right now, and what was the result of the last match?")
-#     print("\nModel Response:")
-#     print(ans)

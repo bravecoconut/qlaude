@@ -1,4 +1,9 @@
-# app/server/server.py
+"""GeepSeek API server.
+
+Provides session management, optional web search, and streaming chat
+completions over Server-Sent Events (SSE).
+"""
+
 import json
 import os
 from openai import OpenAI, APIConnectionError, InternalServerError, OpenAIError
@@ -17,16 +22,16 @@ from datetime import datetime
 from search_agent import search_agent
 from assets import get_chat_comment
 
-# import sys
-# from llama_index.core import Settings, VectorStoreIndex
-# from llama_index.embeddings.huggingface import HuggingFaceEmbedding
-# from llama_index.llms.openai import OpenAI
-# from llama_index.vector_stores.milvus import MilvusVectorStore
+from dotenv import load_dotenv
 
+load_dotenv()
 
 base_url = os.getenv("BASE_URL")
 api_key = os.getenv("API_KEY")
-model_name = os.getenv("MODEL")
+resonning_model = os.getenv("RESONNING_MODEL")
+non_resonning_model = os.getenv("NON_RESONNING_MODEL")
+
+model_name = None
 
 app = Flask(__name__)
 CORS(app)
@@ -34,13 +39,14 @@ CORS(app)
 
 @app.route("/api/sessions")
 def list_sessions():
+    """Return all sessions with metadata for the sidebar."""
     return jsonify(GenMan().all_session())
 
 
 @app.route("/api/load_conversation_on_session_id")
 def load_conversation_on_session_id():
+    """Load full message history for the requested session."""
     session_id = request.args.get("session_id")
-    # assign_active_session(session_id)
     conversation_data = Man(session=session_id).load_conversation()
     return jsonify(
         {"conversation": conversation_data, "redirect_url": f"/chat/{session_id}"}
@@ -52,6 +58,7 @@ client = OpenAI(base_url=f"{base_url}/v1", api_key=api_key)
 
 @app.route("/chat", methods=["POST"])
 def chat():
+    """Handle a chat turn: optional search, streamed LLM response, persistence."""
     body = request.get_json()
     session_id = body.get("session_id")
     user_input = body.get("user_input")
@@ -59,6 +66,11 @@ def chat():
     search = body.get("search")
 
     print(f" think: {think}\n search: {search}\n userinpt: {user_input}")
+
+    if think:
+        model_name = resonning_model
+    else:
+        model_name = non_resonning_model
 
     genman = GenMan(
         think=think, search=search, user_input=user_input, session=session_id
@@ -68,71 +80,58 @@ def chat():
     def generate():
         check_session = genman.check_session()
         yield f"data: {json.dumps({'check_session': check_session})}\n\n".encode()
-        # print(f"session check: {check_session}")
 
         past_content = genman.load_contents()
         messages = past_content
-        # print("past session: ",messages)
-        # print("past session loaded")
 
         sources = []
         if search:
+            # Build recent user/assistant context for the search agent
             user_contents = []
             for message in messages:
                 if (message["role"] == "user") or (message["role"] == "assistant"):
                     user_contents.append(message)
-            # add the current question so the agent knows what to search for
             user_contents.append({"role": "user", "content": user_input})
 
             yield f"data: {json.dumps({'searching': True})}\n\n".encode()
             search_context = search_agent(user_contents=user_contents)
             print("search_context type:", type(search_context))
             print("search_context:", str(search_context)[:300])
-            # here
 
             try:
                 content = json.loads(search_context["content"])
                 result = content.get("result", {})
 
                 print("result keys:", list(result.keys()))
-                # print("snippets:", result.get("instant_snippets", [])[:2])
 
-                # organic results (web_search tool)
+                # Sources from web_search (organic_results)
                 for item in result.get("organic_results", []):
                     if item.get("link"):
-
                         source = {
                             "sources": {
                                 "title": item.get("title", item["link"]),
                                 "link": item["link"],
                             }
                         }
-
                         sources.append(source)
-
                         yield f"data: {json.dumps(source)}\n\n".encode()
 
-                # instant snippets (lookup_fact tool)
+                # Sources from lookup_fact (instant_snippets)
                 for item in result.get("instant_snippets", []):
                     if item.get("url"):
-
                         source = {
                             "sources": {
                                 "title": item.get("title", item["url"]),
                                 "url": item["url"],
                             }
                         }
-
                         sources.append(source)
-
                         yield f"data: {json.dumps(source)}\n\n".encode()
 
             except Exception as e:
                 yield f"data: {json.dumps({'search_not_required': True})}\n\n".encode()
 
-            # print(sources)
-            # yield f"data: {json.dumps({'sources': sources})}\n\n".encode()
-
+            # Inject search results and citation rules for the main model
             messages.append(
                 {
                     "role": "system",
@@ -155,12 +154,10 @@ def chat():
                         "6. Never use 'Source', 'here', 'click here', or a website name as anchor text.\n"
                         "7. If you write something not from the search results (your own connecting words like 'According to the findings'), do NOT link it.\n"
                         "8. If a fact was marked CONFLICT, link both versions separately to their respective URLs.\n"
+                        "9. never write url in anchor tag like this: [https://example.com](https://example.com)"
                     ),
                 }
             )
-
-        # else:
-        #     # check if query requrid to searching
 
         user_for_api = {"role": "user", "content": user_input}
         user_for_db = {
@@ -181,11 +178,9 @@ def chat():
         full_thought_buffer = ""
         full_content_buffer = ""
 
-        # try:
         print("generating", end="", flush=True)
 
         for chunk in stream:
-
             print(".", end="", flush=True)
 
             if not getattr(chunk, "choices", None) or len(chunk.choices) == 0:
@@ -204,11 +199,9 @@ def chat():
                 full_content_buffer += delta.content
                 payload = {"content_chunk": delta.content}
 
-            # If we have a payload, stringify it and convert it to bytes
             if payload:
-                # Format as an SSE-compliant data string or plain JSON chunk
                 data_string = f"data: {json.dumps(payload)}\n\n"
-                yield data_string.encode("utf-8")  # <-- This fixes the AssertionError
+                yield data_string.encode("utf-8")
 
         print("")
 
@@ -233,7 +226,9 @@ def chat():
 
 
 def session_name_gen(user_input):
+    """Generate a short session title from the first user message."""
     try:
+        model_name = non_resonning_model
         instructions = f"""
             "You are a session title generator. "
             "Read the user's message and reply with ONLY a short title, 5 to 7 words. "
@@ -255,14 +250,9 @@ def session_name_gen(user_input):
         return content.strip() if content else "New Chat"
 
     except (InternalServerError, OpenAIError, APIConnectionError) as e:
-        # Fallback title if OpenAI is completely down or returns a Bad Gateway
         print(f"OpenAI API Error caught: {e}")
         return "New Chat"
 
-
-# @app.route("/api/chat_blank_comment")
-# def chat_blank_comment():
-#     return jsonify(get_chat_comment())
 
 if __name__ == "__main__":
     app.run(debug=True, port=5000)

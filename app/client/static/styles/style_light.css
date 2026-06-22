@@ -1,17 +1,18 @@
+/* GeepSeek light theme */
+
 body {
     all: unset;
     display: flex;
     background-color: #0b0b03;
-    /* border: 2px solid rgb(255, 0, 0); */
     height: 100vh;
     overflow: hidden;
     font-family: sans-serif;
 
 }
 
-/*  */
 .logo img {
     width: 130px;
+    filter: brightness(0) invert(1);
 }
 
 hr {
@@ -23,21 +24,18 @@ hr {
 
 .side {
     width: 231px;
-    /* width: 0px; */
     border-right: 1px solid #ffffff13;
-    background-color: #909090;
+    background-color: #000000;
     display: flex;
     flex-direction: column;
     padding: 15px 15px 7px 15px;
     transition: 100ms;
-    /* visibility: hidden; */
 }
 
 
 
 
 .upper {
-    /* border: 1px solid rgb(255, 0, 0); */
     display: flex;
     /* margin: 15px 3px 15px 15px; */
     justify-content: space-between;
@@ -46,7 +44,6 @@ hr {
 .logo {
     color: #ffffff4e;
     justify-self: left;
-    /* border: 2px solid rgb(255, 0, 0); */
 }
 
 #upper_buttons {
@@ -54,15 +51,12 @@ hr {
     justify-content: center;
     align-items: center;
     display: flex;
-    /* border: 2px solid rgb(0, 76, 255); */
     padding-left: -10px;
-    /* position: absolute; */
     left: 190px;
 
 }
 
 #search_button {
-    /* border: 2px solid rgb(255, 0, 0); */
     margin: 9px;
     align-self: center;
 
@@ -71,14 +65,11 @@ hr {
 
 
 #side_button {
-    /* border: 2px solid rgb(255, 0, 0); */
     margin: 9px;
     align-self: center;
-    /* position: ; */
 }
 
 .button_con {
-    /* border: 2px solid rgb(0, 255, 187); */
     border-radius: 80px;
     display: grid;
     align-items: center;
@@ -92,11 +83,9 @@ hr {
 
 #new_chat {
     all: unset;
-    /* margin: ; */
     cursor: pointer;
     color: #ffffff;
     font-size: 14px;
-    /* border: 2px solid rgb(255, 0, 0);  */
     display: flex;
     margin: 22px 0 0 0;
     padding: 9px 9px 11px 9px;
@@ -106,7 +95,7 @@ hr {
     border-radius: 100px;
     justify-content: center;
     align-items: center;
-    background-color: #ffffff29;
+    background-color: #ffffff0f;
 }
 
 #new_chat_img {
@@ -118,11 +107,8 @@ hr {
 } */
 
 .chats {
-    /* border: 2px solid rgb(255, 0, 0); */
     flex: 1;
-    /* height: 100px; */
     overflow-y: scroll;
-    /* overflow: hidden; */
     scrollbar-width: none;
     mask-image: linear-gradient(to bottom, transparent 3%, black 10%, black 80%, transparent 100%);
 }
@@ -154,8 +140,6 @@ hr {
 }
 
 #setting-toggle {
-    /* border: 2px solid rgb(255, 0, 0); */
-    /* height: 50px; */
     margin: 10px 0 10px 0;
     padding: 10px 0;
     display: flex;
@@ -173,7 +157,7 @@ hr {
 }
 
 #upper_nav {
-    background-color: #ffffff1f;
+    background-color: #000000;
     display: inline-flex;
     position: absolute;
     align-items: center;
@@ -211,7 +195,6 @@ pre {
     padding: 10px;
     flex-direction: column;
     border-radius: 25px;
-    /* justify-content: space-between; */
     border: 1px solid #fefefe0d;
 
     height: auto;
@@ -221,7 +204,6 @@ pre {
     all: unset;
     /* border: 1px solid #5c24b5; */
     padding: 0px 0px 0px 0px;
-    /* overflow-wrap: break-word; */
     /* word-break: break-all;  */
     color: #ffffff;
     font-size: 16px;
@@ -244,7 +226,6 @@ pre {
 }
 
 #get_input_con {
-    /* height: 50px; */
     height: auto;
     min-height: 40px;
     /* border: 1px solid #24b530; */
@@ -257,7 +238,6 @@ pre {
     color: #ffffffad;
     /* border: 1px solid #5c24b5; */
 
-    /* height: 50px; */
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -343,7 +323,6 @@ pre {
     display: flex;
     flex-direction: column;
 
-    /* align-items: center; */
     justify-content: center;
 
 }
@@ -351,14 +330,10 @@ pre {
 #message_box {
     display: flex;
     /* border: 1px solid #68b524; */
-    background-color: #d3d3d3;
-    /* position: absolute; */
+    background-color: #ffffff;
     padding: 0 0 40px 0;
-    /* flex: 1; */
-    /* width: 100vw; */
     justify-self: center;
     z-index: 20;
-    /* height: 120px; */
     justify-content: center;
     align-items: flex-end;
 }
@@ -368,8 +343,7 @@ pre {
     /* border: 5px solid #ff1313; */
     z-index: 0;
     flex: 1;
-    /* padding: 0 20vw; */
-    background-color: #d3d3d3;
+    background-color: #ffffff;
     overflow-y: scroll;
     scrollbar-width: none;
     padding: 0 12vw;
@@ -382,7 +356,6 @@ pre {
 
 #conversation_con a {
     color: inherit;
-    text-decoration:  underline dotted;
 }
 
 .user {
@@ -395,7 +368,6 @@ pre {
     overflow-wrap: break-word;
     /* border: 1px solid #ffffff2b; */
     padding: 10px 15px;
-    /* font-size: 16px; */
 
 }
 
@@ -410,14 +382,20 @@ pre {
     margin: 20px 0 20px 0;
     align-self: flex-start;
     word-break: break-all;
+    color: #000000;
     overflow-wrap: break-word;
-    /* border: 2px solid rgb(255, 0, 0); */
-    /* flex: 1; */
     width: 100%;
-    /* min-height: 55vh; */
 
-    /* font-size: 16px; */
 
+}
+
+.model a {
+    text-decoration:  underline dotted;
+
+}
+
+.model a:hover {
+    background-color: #a9a9a9;
 }
 
 
@@ -451,12 +429,11 @@ pre {
 
 
 .thought-content {
-    /* border-left: 2px solid #ffffff11; */
     padding: 10px 0;
     max-height: 300px;
     overflow-y: scroll;
     scrollbar-width: none;
-    mask-image: linear-gradient(to bottom, transparent -3%, black 24%, black 80%, transparent 100%);
+    mask-image: linear-gradient(to bottom, transparent -3%, black 10%, black 86%, transparent 100%);
 
     word-break: break-word;
     overflow-wrap: break-word;
@@ -465,7 +442,6 @@ pre {
 .thought-container {
     border-top: 2px solid #00000017;
     border-radius: 20px 20px 0 0;
-    /* border-bottom: none; */
 
 }
 
@@ -479,7 +455,6 @@ pre {
 }
 
 .search p {
-    /* transition: 100ms; */
     padding: 7px 100px 4px 16px;
     margin: 0 10px 10px 10px;
     white-space: pre-wrap;
@@ -490,7 +465,7 @@ pre {
     
 }
 .search p:hover{
-    background-color: #ffffff16;
+    color: #000000;
 }
 
 .search-container a {
@@ -503,7 +478,6 @@ pre {
 }
 
 .search-content {
-    /* border-left: 2px solid #ffffff11; */
     padding: 10px 0;
     max-height: 150px;
     overflow-y: scroll;
@@ -514,10 +488,8 @@ pre {
 }
 
 .search-container {
-    /* margin: 0 15px; */
     border-top: 2px solid #00000017;
     border-radius: 20px 20px 0 0;
-    /* border-bottom: none; */
 }
 
 .response {
@@ -594,7 +566,6 @@ details[open] summary::before {
 }
 
 #new_chat_comment {
-    /* border: 2px solid gold; */
     color: #191919;
     z-index: 0;
     flex: 1;
@@ -616,7 +587,7 @@ details[open] summary::before {
     /* font-family: sans-serif;
     font-weight: 700;
     font-size: 10px; */
-    background: linear-gradient(to right, #ffffff, #1f1f1f, #ffffff, #ffffff);
+    background: linear-gradient(to right, #1f1f1f, #ffffff, #1f1f1f, #1f1f1f);
     background-size: 200% auto;
 
     background-clip: text;

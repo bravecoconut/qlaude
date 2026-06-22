@@ -4,12 +4,10 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Document</title>
-    <link id="stylesheet" rel="stylesheet" href="{{ url_for('static', filename='styles/style_dark.css') }}">
-    <!-- <link id="stylesheet" rel="stylesheet" href="{{ url_for('static', filename='style_light.css') }}"> -->
+    <title>GeepSeek</title>
+    <link id="stylesheet" rel="stylesheet" href="{{ url_for('static', filename='styles/style_light.css') }}">
 
     <script src="{{ url_for('static', filename='app.js') }}"></script>
-    <!-- add in <head> -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/9.1.6/marked.min.js"></script>
 </head>
 
@@ -73,41 +71,7 @@
         <div id="upper_nav"></div>
 
         <div id="chatbox">
-            <div id="conversation_con">
-
-                
-
-                <!-- <span id="searching_text">Searching</span> -->
-                
-                <!-- <div id="new_chat_comment">
-                    <p>Ask anything!</p>
-                </div> -->
-                <!-- <div> -->
-                <!-- <div class="user">hello</div> -->
-
-                <!-- <div class="model">
-                    <div class="search-container">
-                        <details class="search">
-                            <summary></summary>
-                            <div class="search-content">
-                            </div>
-                        </details>
-                    </div>
-
-                    <div class="thought-container">
-                        <details class="thoughts">
-                            <summary></summary>
-                            <div class="thought-content">
-                                <p></p>
-                            </div>
-                        </details>
-                    </div>
-
-                    <div class="response"></div>
-                </div> -->
-                <!-- </div> -->
-
-            </div>
+            <div id="conversation_con"></div>
 
 
             <div id="message_box">
@@ -138,9 +102,6 @@
                                 </svg> <span>Search</span>
                             </div>
 
-                            <!-- <div onclick="" id="create_image_funtion_button">
-                                <span id="banana_emoji">🍌</span> <span>Create Image</span>
-                            </div> -->
                         </div>
 
 
@@ -171,18 +132,8 @@
         </div>
     </div>
 <script>
-  // Inject the session_id from Flask into JS on page load
   const SESSION_ID_FROM_URL = "{{ session_id }}";
 </script>
 </body>
 
 </html>
-
-
-<!-- <div class="model">
-    <details class="thoughts">
-        <summary>Thought</summary>
-        <p>delta.reasoning or delta.reasoning_content here</p>
-    </details>
-    delta.content here
-</div> -->

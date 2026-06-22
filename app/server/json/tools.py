@@ -1,6 +1,13 @@
+"""Generate OpenAI-compatible tool schemas for GeepSeek search functions.
+
+Run this module to regenerate app/server/json/tools.json.
+"""
+
 import json
 
+
 def buildTools():
+    """Build tool definitions and write them to tools.json."""
     OPENAI_SEARCH_TOOLS = [
         {
             "type": "function",
@@ -120,8 +127,9 @@ def buildTools():
         }
     ]
 
+    with open("tools.json", "w") as file:
+        json.dump(OPENAI_SEARCH_TOOLS, file)
 
-    with open("tools.json", 'w') as file:
-        json.dump(OPENAI_SEARCH_TOOLS,file) 
 
-def 
+if __name__ == "__main__":
+    buildTools()
