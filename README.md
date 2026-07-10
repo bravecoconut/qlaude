@@ -6,7 +6,7 @@ Qlaude is a premier Conversational AI SaaS platform designed for high-performanc
 
 here is [Preview video](documentation/assets/video.mp4)
 
-## 📸 Screenshots
+## Screenshots
 
 ![Screenshot 1](documentation/assets/image1.png)
 ![Screenshot 2](documentation/assets/image2.png)
