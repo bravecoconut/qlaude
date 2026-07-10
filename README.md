@@ -2,7 +2,7 @@
 
 Qlaude is a premier Conversational AI SaaS platform designed for high-performance reasoning and real-time web search capabilities. Built for scale, it provides a seamless, subscription-based experience with advanced retrieval-augmented generation (RAG) and extended model reasoning.
 
-## 🎥 Preview Video
+## Preview Video
 
 here is [Preview video](documentation/assets/video.mp4)
 
