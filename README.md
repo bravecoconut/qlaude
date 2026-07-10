@@ -16,7 +16,7 @@ here is [Preview video](documentation/assets/video.mp4)
 ![Screenshot 6](documentation/assets/image6.png)
 ![Screenshot 7](documentation/assets/image7.png)
 
-## 🌟 Features
+## Features
 
 - **Enterprise-Grade AI Chat**: Multi-turn conversational interface with persistent sessions
 - **Think Reasoning Engine**: Advanced mode for deep, extended model reasoning to solve complex problems
@@ -37,7 +37,7 @@ here is [Preview video](documentation/assets/video.mp4)
 | [Authentication](documentation/Auth.md) | OAuth 2.0 implementation and identity management |
 | [Search Infrastructure](app/server/search/search.md) | Web search integrations and RAG tools |
 
-## 💰 Subscription Tiers
+## Subscription Tiers
 
 | Tier | Price | Daily Interactions | RAG Search | Think Reasoning | Concurrent Sessions |
 |------|-------|-------------------|------------|-----------------|---------------------|
@@ -45,7 +45,7 @@ here is [Preview video](documentation/assets/video.mp4)
 | **Basic** | ₹499/mo | 150 | ✅ | ✅ | 50 |
 | **Plus** | ₹999/mo | Unlimited | ✅ | ✅ | Unlimited |
 
-## 🚀 Quick Start
+## Quick Start
 
 ### Prerequisites
 
@@ -105,7 +105,7 @@ stripe listen --forward-to http://127.0.0.1:5001/stripe/webhook
 
 4. Access the platform at [http://127.0.0.1:5001/chat/new](http://127.0.0.1:5001/chat/new)
 
-## 🏗️ Architecture
+## Architecture
 
 Qlaude operates on a modern, decoupled SaaS architecture:
 
@@ -113,7 +113,7 @@ Qlaude operates on a modern, decoupled SaaS architecture:
 - **Core API** (`app/server/`) - REST API handling AI inference, search, and streaming on port 5000
 - **Data Layer** (`app/data/`) - SQLite databases for users, sessions, and chat histories
 
-## 🔧 Database Initialization
+## Database Initialization
 
 The platform automatically creates all necessary databases and tables on first startup:
 
@@ -124,7 +124,7 @@ The platform automatically creates all necessary databases and tables on first s
 
 No manual database setup is required.
 
-## 📝 Development
+## Development
 
 ### Project Structure
 
@@ -148,7 +148,7 @@ Qlaude/
 └── requirements.txt     # Python dependencies
 ```
 
-## 🤝 Contributing
+## Contributing
 
 Contributions are welcome! Please feel free to submit a Pull Request.
 
