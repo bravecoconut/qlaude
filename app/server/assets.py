@@ -1,4 +1,4 @@
-"""Auxiliary data accessors for GeepSeek."""
+"""Auxiliary data accessors for Qlaude."""
 
 import sqlite3
 from pathlib import Path

@@ -1,16 +1,17 @@
-"""GeepSeek API server.
+"""Qlaude API server.
 
 Provides session management, optional web search, and streaming chat
-completions over Server-Sent Events (SSE).
+completions over Server-Sent Events (SSE).  Includes per-user quota
+enforcement for the SaaS tier system.
 """
 
 import json
 import os
+import sys
 from openai import OpenAI, APIConnectionError, InternalServerError, OpenAIError
 from flask import (
     Flask,
     jsonify,
-    render_template,
     request,
     Response,
     stream_with_context,
@@ -20,11 +21,16 @@ from flask_cors import CORS
 import pytz
 from datetime import datetime
 from search_agent import search_agent
-from assets import get_chat_comment
 
 from dotenv import load_dotenv
 
 load_dotenv()
+
+# Allow imports from sibling data package
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "data"))
+from user_manager import UserManager  # noqa: E402
+
+user_manager = UserManager()
 
 base_url = os.getenv("BASE_URL")
 api_key = os.getenv("API_KEY")
@@ -37,17 +43,96 @@ app = Flask(__name__)
 CORS(app)
 
 
+def _parse_user_id(raw_user_id):
+    """Validate and normalize a user_id from the request."""
+    if raw_user_id is None or raw_user_id == "":
+        return None, (jsonify({"error": "Authentication required"}), 401)
+
+    try:
+        user_id = int(raw_user_id)
+    except (TypeError, ValueError):
+        return None, (jsonify({"error": "Invalid user_id"}), 400)
+
+    user = user_manager.get_user_by_id(user_id)
+    if not user:
+        return None, (jsonify({"error": "User not found"}), 404)
+
+    return user_id, None
+
+
+def _check_session_access(user_id, session_id):
+    """Verify the user owns the session when loading an existing one."""
+    if not session_id:
+        return None
+
+    genman = GenMan(user_id=user_id, session=session_id)
+    if genman.session_belongs_to_user(session_id, user_id):
+        return None
+
+    return jsonify({"error": "Session not found or access denied"}), 403
+
+
+def _session_table_exists(genman):
+    """Return True when the per-session message table already exists."""
+    connect = genman.get_db(genman.database)
+    cursor = connect.cursor()
+    cursor.execute(f"PRAGMA table_info({genman.session})")
+    exists = cursor.fetchone()
+    connect.close()
+    return bool(exists)
+
+
+def _max_sessions_error_response(user_id, genman):
+    """Return an SSE-friendly error when the user is at their session limit."""
+    quota = user_manager.check_quota(user_id)
+    max_sessions = quota.get("max_sessions", 3)
+    if max_sessions == -1:
+        return None
+
+    current_count = genman.count_user_sessions(user_id)
+    if current_count < max_sessions:
+        return None
+
+    return {
+        "error": (
+            f"You've reached your limit of {max_sessions} sessions "
+            f"on the {quota['plan']} plan. Delete an old session or upgrade."
+        ),
+        "error_type": "max_sessions_exceeded",
+        "max_sessions": max_sessions,
+        "current_sessions": current_count,
+    }
+
+
 @app.route("/api/sessions")
 def list_sessions():
-    """Return all sessions with metadata for the sidebar."""
-    return jsonify(GenMan().all_session())
+    """Return sessions owned by the authenticated user."""
+    user_id, error = _parse_user_id(request.args.get("user_id"))
+    if error:
+        return error
+
+    return jsonify(GenMan(user_id=user_id).all_session())
 
 
 @app.route("/api/load_conversation_on_session_id")
 def load_conversation_on_session_id():
-    """Load full message history for the requested session."""
+    """Load full message history for a session owned by the user."""
+    user_id, error = _parse_user_id(request.args.get("user_id"))
+    if error:
+        return error
+
     session_id = request.args.get("session_id")
-    conversation_data = Man(session=session_id).load_conversation()
+    if not session_id:
+        return jsonify({"error": "session_id is required"}), 400
+
+    access_error = _check_session_access(user_id, session_id)
+    if access_error:
+        return access_error
+
+    conversation_data = Man(session=session_id, user_id=user_id).load_conversation()
+    if isinstance(conversation_data, dict) and conversation_data.get("error"):
+        return jsonify(conversation_data), 403
+
     return jsonify(
         {"conversation": conversation_data, "redirect_url": f"/chat/{session_id}"}
     )
@@ -59,13 +144,54 @@ client = OpenAI(base_url=f"{base_url}/v1", api_key=api_key)
 @app.route("/chat", methods=["POST"])
 def chat():
     """Handle a chat turn: optional search, streamed LLM response, persistence."""
-    body = request.get_json()
+    body = request.get_json() or {}
     session_id = body.get("session_id")
     user_input = body.get("user_input")
     think = body.get("think")
     search = body.get("search")
 
-    print(f" think: {think}\n search: {search}\n userinpt: {user_input}")
+    user_id, error = _parse_user_id(body.get("user_id"))
+    if error:
+        return error
+
+    print(
+        f" think: {think}\n search: {search}\n userinpt: {user_input}\n user_id: {user_id}"
+    )
+
+    if session_id:
+        access_error = _check_session_access(user_id, session_id)
+        if access_error:
+            return access_error
+
+    # ── Quota enforcement ────────────────────────────────────────
+    quota = user_manager.check_quota(user_id)
+
+    if not quota["allowed"]:
+        def quota_error():
+            limit = quota["limit"]
+            plan = quota["plan"]
+            msg = (
+                f"You've reached your daily limit of {limit} messages on the **{plan}** plan. "
+                f"Upgrade your plan for more messages."
+            )
+            yield f"data: {json.dumps({'error': msg, 'error_type': 'quota_exceeded', 'quota': quota})}\n\n".encode()
+
+        return Response(stream_with_context(quota_error()), mimetype="text/event-stream")
+
+    if search and not quota["search_allowed"]:
+        def feature_error_search():
+            msg = "**Search mode** is not available on the free plan. Upgrade to Basic or Plus to unlock it."
+            yield f"data: {json.dumps({'error': msg, 'error_type': 'feature_locked', 'feature': 'search'})}\n\n".encode()
+
+        return Response(stream_with_context(feature_error_search()), mimetype="text/event-stream")
+
+    if think and not quota["think_allowed"]:
+        def feature_error_think():
+            msg = "**Think mode** is not available on the free plan. Upgrade to Basic or Plus to unlock it."
+            yield f"data: {json.dumps({'error': msg, 'error_type': 'feature_locked', 'feature': 'think'})}\n\n".encode()
+
+        return Response(stream_with_context(feature_error_think()), mimetype="text/event-stream")
+    # ─────────────────────────────────────────────────────────────
 
     if think:
         model_name = resonning_model
@@ -73,12 +199,26 @@ def chat():
         model_name = non_resonning_model
 
     genman = GenMan(
-        think=think, search=search, user_input=user_input, session=session_id
+        think=think,
+        search=search,
+        user_input=user_input,
+        session=session_id,
+        user_id=user_id,
     )
     print("instance created.. working ahead")
 
     def generate():
+        if not _session_table_exists(genman):
+            max_sessions_error = _max_sessions_error_response(user_id, genman)
+            if max_sessions_error:
+                yield f"data: {json.dumps(max_sessions_error)}\n\n".encode()
+                return
+
         check_session = genman.check_session()
+        if check_session.get("error"):
+            yield f"data: {json.dumps(check_session)}\n\n".encode()
+            return
+
         yield f"data: {json.dumps({'check_session': check_session})}\n\n".encode()
 
         past_content = genman.load_contents()
@@ -86,7 +226,6 @@ def chat():
 
         sources = []
         if search:
-            # Build recent user/assistant context for the search agent
             user_contents = []
             for message in messages:
                 if (message["role"] == "user") or (message["role"] == "assistant"):
@@ -104,7 +243,6 @@ def chat():
 
                 print("result keys:", list(result.keys()))
 
-                # Sources from web_search (organic_results)
                 for item in result.get("organic_results", []):
                     if item.get("link"):
                         source = {
@@ -116,7 +254,6 @@ def chat():
                         sources.append(source)
                         yield f"data: {json.dumps(source)}\n\n".encode()
 
-                # Sources from lookup_fact (instant_snippets)
                 for item in result.get("instant_snippets", []):
                     if item.get("url"):
                         source = {
@@ -128,10 +265,9 @@ def chat():
                         sources.append(source)
                         yield f"data: {json.dumps(source)}\n\n".encode()
 
-            except Exception as e:
+            except Exception:
                 yield f"data: {json.dumps({'search_not_required': True})}\n\n".encode()
 
-            # Inject search results and citation rules for the main model
             messages.append(
                 {
                     "role": "system",
@@ -221,6 +357,14 @@ def chat():
 
         genman.save_into_session(model)
         print("saving model output")
+
+        user_manager.increment_usage(user_id, "messages_used")
+        if search:
+            user_manager.increment_usage(user_id, "search_used")
+        if think:
+            user_manager.increment_usage(user_id, "think_used")
+        updated_quota = user_manager.check_quota(user_id)
+        yield f"data: {json.dumps({'quota_update': updated_quota})}\n\n".encode()
 
     return Response(stream_with_context(generate()), mimetype="text/event-stream")
 

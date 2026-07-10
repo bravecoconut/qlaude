@@ -1,22 +1,22 @@
-# Search Tools
+# RAG Search Infrastructure
 
-GeepSeek exposes five search tools to the LLM through OpenAI-compatible function calling. Tool schemas live in `app/server/json/tools.json`; implementations are in `app/server/search/search.py`.
+Qlaude's Retrieval-Augmented Generation (RAG) search pipeline exposes advanced data acquisition tools to the inference models through OpenAI-compatible function calling schemas. Tool definitions are version-controlled in `app/server/json/tools.json` and executed via the `app/server/search/search.py` module.
 
-## Tool reference
+## Tool Capabilities
 
-| Tool | Use case |
+| Tool Registration | Enterprise Use Case |
 |------|----------|
-| `lookup_fact` | Time-sensitive facts: news, scores, releases, live data. Fetches DuckDuckGo snippets and news, then scrapes top pages. |
-| `web_search` | General web search with optional keyword filtering on scraped text. |
-| `search_sites` | Direct scraping of specified URLs. |
-| `list_page_sections` | Lists headings on a page for selective extraction. |
-| `fetch_sections` | Retrieves content under headings returned by `list_page_sections`. |
+| `lookup_fact` | Rapid acquisition of time-sensitive data (market events, news, dynamic metrics). Aggregates search engine snippets and executes parallel scraping on high-value targets. |
+| `web_search` | Broad web crawling with integrated NLP keyword filtering on extracted datasets. |
+| `search_sites` | Targeted, direct data extraction from specified domains or URLs. |
+| `list_page_sections` | Structural analysis of long-form documents. Returns a manifest of available content headings for selective extraction. |
+| `fetch_sections` | High-precision extraction of specific document sections identified by `list_page_sections`. |
 
-`lookup_fact` is listed first in the tool registry so the model prefers it for current-events queries.
+The `lookup_fact` capability is prioritized in the tool registry to encourage the model to seek out real-time, current-events data.
 
-## JSON schema
+## Schema Registration
 
-The following schemas are registered with the model (also stored in `tools.json`):
+The platform registers the following strict schemas with the LLM backend (mirrored in `tools.json`):
 
 ```python
 OPENAI_SEARCH_TOOLS = [
@@ -26,7 +26,7 @@ OPENAI_SEARCH_TOOLS = [
             "name": "lookup_fact",
             "description": (
                 "Best for time-sensitive questions (news, sports, elections, releases). "
-                "Returns DuckDuckGo snippets and scraped page content."
+                "Returns search engine snippets and scraped page content."
             ),
             "parameters": {
                 "type": "object",
@@ -128,15 +128,15 @@ OPENAI_SEARCH_TOOLS = [
 ]
 ```
 
-## Integration flow
+## RAG Orchestration Flow
 
-1. `search_agent.py` sends the conversation and tool schemas to the model.
-2. The model may return one or more tool calls.
-3. Each call is dispatched to the matching function from `build_search_tools()`.
-4. Results are serialized as JSON and attached to the message thread.
-5. The main chat handler injects structured facts into the completion prompt with mandatory citation rules.
+1. The `search_agent.py` orchestrator dispatches the active customer context and tool schemas to the inference backend.
+2. The model evaluates the request and may yield one or more autonomous tool invocations.
+3. Invocations are mapped and dispatched to the concrete implementations within `build_search_tools()`.
+4. Retrieved external data is structured, serialized as JSON, and securely appended to the conversational state.
+5. The primary generation pipeline ingests the structured facts into its prompt template, bound by strict, system-level citation mandates.
 
-### Example control loop
+### Execution Control Loop Example
 
 ```python
 import os
@@ -158,7 +158,7 @@ tool_mapping = {func.__name__: func for func in local_tools}
 
 def run_search(user_message: str):
     messages = [
-        {"role": "system", "content": "Use search tools for time-sensitive facts."},
+        {"role": "system", "content": "Utilize RAG search tools for external data acquisition."},
         {"role": "user", "content": user_message},
     ]
 
@@ -179,7 +179,7 @@ def run_search(user_message: str):
         name = tool_call.function.name
         args = json.loads(tool_call.function.arguments)
         func = tool_mapping.get(name)
-        result = func(**args) if func else {"error": f"Unknown tool: {name}"}
+        result = func(**args) if func else {"error": f"Unknown capability requested: {name}"}
         messages.append({
             "role": "tool",
             "tool_call_id": tool_call.id,
@@ -191,25 +191,25 @@ def run_search(user_message: str):
     return final.choices[0].message.content
 ```
 
-## Operational notes
+## Operational Guidelines
 
-### Per-request tool state
+### Secure State Management
 
-`build_search_tools()` creates an isolated closure so `list_page_sections` and `fetch_sections` share state within a single request. Instantiate a new tool set per chat request to avoid cross-session contamination.
+`build_search_tools()` implements an isolated closure pattern. This ensures that stateful tools like `list_page_sections` and `fetch_sections` share secure state *only* within the bounds of a single customer request. A fresh tool set is instantiated per interaction to prevent cross-tenant data contamination.
 
-### Timeouts and retries
+### Resilience and Fallbacks
 
-- Trafilatura downloads use a 5-second timeout.
-- DuckDuckGo queries retry up to two times with exponential backoff.
-- Bare domains (e.g. `example.com`) are normalized to `https://` before fetching.
+- Upstream `trafilatura` extractions are governed by a strict 5-second timeout policy.
+- Search engine API queries implement exponential backoff with a maximum of two retries to guarantee high availability.
+- Raw domain inputs are automatically sanitized and normalized to secure `https://` protocols prior to extraction.
 
-### Context limits
+### Context Window Optimization
 
-Scraped excerpts are capped at 12,000 characters and 30 sentences per page to stay within model context windows.
+To maintain peak inference performance and prevent context window overflow, scraped payloads are aggressively optimized: excerpts are strictly capped at 12,000 characters and a maximum of 30 semantic sentences per document.
 
-## Regenerating `tools.json`
+## Schema Synchronization
 
-Run `app/server/json/tools.py` to write the schema file from the in-code definitions:
+If modifications are made to the core tool definitions, the schema registry must be manually synchronized. Execute the `app/server/json/tools.py` utility to serialize the latest in-code schemas to the `tools.json` file:
 
 ```bash
 python app/server/json/tools.py

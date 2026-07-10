@@ -1,5 +1,6 @@
 # Environments
 venv/
+.venv/
 .env
 
 # Cache and compiled files
@@ -16,6 +17,9 @@ __pycache__/
 # Logs
 logs/
 *.log
+
+# Databases (auto-created)
+app/data/*.db
 
 # Misc
 .DS_Store

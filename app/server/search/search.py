@@ -1,4 +1,4 @@
-"""Web search and page extraction tools for GeepSeek.
+"""Web search and page extraction tools for Qlaude.
 
 Provides DuckDuckGo queries, page scraping, and section-based extraction.
 Registered with the LLM through build_search_tools().

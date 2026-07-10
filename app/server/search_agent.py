@@ -1,4 +1,4 @@
-"""Search agent for GeepSeek.
+"""Search agent for Qlaude.
 
 Invokes LLM tool calling to retrieve web content when Search mode is enabled.
 Results are structured for injection into the main chat completion.

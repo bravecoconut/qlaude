@@ -1,4 +1,4 @@
-"""Shared utilities for GeepSeek server logging and debug output."""
+"""Shared utilities for Qlaude server logging and debug output."""
 
 from datetime import datetime
 import json

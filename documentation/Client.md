@@ -1,56 +1,58 @@
-# Client
+# Frontend Web Application
 
-The GeepSeek client is a Flask application that renders the chat interface and delegates all inference to the API server.
+The Qlaude client is a high-performance Flask web service that orchestrates the customer-facing SaaS interface. It acts as a presentation layer, delegating all heavy computational inference and search logic to the core API backend microservice.
 
-## Entry point
+## Service Entry Point
 
-**File:** `app/client/serv.py`  
-**Port:** 5001
+**Microservice Target:** `app/client/serv.py`  
+**Internal Port Bind:** `5001`
 
-## Routes
+## Application Routing
+
+The frontend handles session initialization and interface rendering:
 
 | Route | Behavior |
 |-------|----------|
-| `/` | Redirects to `/chat/new` |
-| `/chat`, `/chat/` | Redirects to `/chat/new` |
-| `/chat/new` | New conversation; no session ID loaded |
-| `/chat/<session_id>` | Existing conversation; history loaded on page init |
+| `/` | Initial entry; redirects to secure workspace `/chat/new` |
+| `/chat`, `/chat/` | Routing aliases; redirects to `/chat/new` |
+| `/chat/new` | Provisions a new, isolated conversation workspace |
+| `/chat/<session_id>` | Restores a persistent customer session, hydrating history on initialization |
 
-The active session ID is injected into the page template and consumed by `app.js` on load.
+The secure active session ID is seamlessly injected into the server-side template and consumed by the JavaScript application state on load.
 
-## Templates
+## Interface Templates
 
-**Directory:** `app/client/templates/`
+**Resource Directory:** `app/client/templates/`
 
-- `chat.html` — Main chat layout: sidebar, message list, input area, and feature toggles (GeepThink, Search).
+- `chat.html` — The primary single-page application (SPA) layout, featuring the navigation sidebar, real-time message stream, composition area, and premium feature toggles (GeepThink Reasoning, Real-Time Search).
 
-Templates use Jinja2 and Flask's `url_for` helper for static asset paths.
+The platform utilizes Jinja2 templating with dynamic `url_for` bindings for robust static asset delivery.
 
-## Static assets
+## Static Asset Delivery
 
-**Directory:** `app/client/static/`
+**Resource Directory:** `app/client/static/`
 
 | Asset | Role |
 |-------|------|
-| `app.js` | Session list, conversation loading, SSE streaming, UI toggles |
-| `styles/style_light.css` | Light theme stylesheet |
-| `styles/style_dark.css` | Dark theme stylesheet |
-| `images/` | Branding and icons |
+| `app.js` | The core client-side controller. Manages session navigation, asynchronous history hydration, SSE stream parsing, and dynamic UI state. |
+| `styles/style_light.css` | Light interface design system |
+| `styles/style_dark.css` | Dark interface design system |
+| `images/` | Brand assets and typography icons |
 
-## API integration
+## Backend API Integration
 
-The client calls the server at `http://127.0.0.1:5000` (or `http://localhost:5000` for chat):
+The frontend client acts as an orchestrator, communicating with the core backend API (internally mapped to `http://127.0.0.1:5000` during development):
 
-| Endpoint | Method | Usage |
+| Endpoint | Method | Operational Usage |
 |----------|--------|-------|
-| `/api/sessions` | GET | Populate the recent sessions sidebar |
-| `/api/load_conversation_on_session_id` | GET | Restore messages for a session |
-| `/chat` | POST | Send a message; receive SSE stream |
+| `/api/sessions` | GET | Hydrates the persistent sessions sidebar navigation |
+| `/api/load_conversation_on_session_id` | GET | Restores complete message context for a selected workspace |
+| `/chat` | POST | Dispatches customer payloads and establishes the SSE streaming connection |
 
-## User controls
+## Interactive Customer Controls
 
-- **New chat** — Clears the view and resets the URL to `/chat/new`.
-- **GeepThink** — Sends `think: true` to use the reasoning model.
-- **Search** — Sends `search: true` to run the search agent before generation.
+- **New Workspace** — Clears the active UI state and re-routes to `/chat/new` for fresh interactions.
+- **Think Toggle** — Attaches the `think: true` payload parameter to route the request through the advanced reasoning models.
+- **Web Search Toggle** — Attaches the `search: true` parameter to invoke the backend RAG agents before generation.
 
-Markdown in messages is rendered client-side with [marked.js](https://marked.js.org/).
+Markdown payloads streamed from the API are compiled and rendered client-side using the highly optimized [marked.js](https://marked.js.org/) library.

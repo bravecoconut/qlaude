@@ -1,95 +1,93 @@
-# Server
+# API Backend Service
 
-The GeepSeek API server handles chat requests, optional web search, session management, and streaming responses.
+The Qlaude API Backend is a robust, isolated microservice responsible for orchestrating LLM inference, real-time web search capabilities (RAG), secure session management, and streaming low-latency responses back to the client interface.
 
-## Entry point
+## Service Entry Point
 
-**File:** `app/server/server.py`  
-**Port:** 5000
+**Microservice Target:** `app/server/server.py`  
+**Internal Port Bind:** `5000`
 
-## API endpoints
+## REST API Endpoints
 
-| Endpoint | Method | Description |
+| Endpoint | HTTP Method | Operational Description |
 |----------|--------|-------------|
-| `/api/sessions` | GET | Returns all sessions with names and timestamps |
-| `/api/load_conversation_on_session_id` | GET | Returns full message history for a session |
-| `/chat` | POST | Processes a user message and streams the response (SSE) |
+| `/api/sessions` | GET | Enumerates active customer workspaces, including semantic names and timestamps |
+| `/api/load_conversation_on_session_id` | GET | Rehydrates complete interaction histories for a specific workspace |
+| `/chat` | POST | Ingests customer prompts, executes RAG/Reasoning pipelines, and streams responses (SSE) |
 
-### POST `/chat` body
+### POST `/chat` Payload Structure
 
 ```json
 {
   "session_id": "S20260623015752524927",
-  "user_input": "Your message",
+  "user_input": "Customer inquiry text",
   "think": false,
   "search": false
 }
 ```
 
-An empty or missing `session_id` creates a new session on the first message.
+A null or omitted `session_id` instructs the backend to provision a new, secure workspace for the incoming interaction.
 
-### SSE event types
+### Server-Sent Events (SSE) Stream Architecture
 
-| Event field | Description |
+The `/chat` endpoint utilizes high-performance SSE to deliver chunked payloads:
+
+| Event Identifier | Description |
 |-------------|-------------|
-| `check_session` | Session creation or validation result |
-| `searching` | Search agent started |
-| `sources` | Individual source link from search results |
-| `search_not_required` | Search returned no usable results |
-| `reasoning_chunk` | Incremental reasoning text (GeepThink) |
-| `content_chunk` | Incremental assistant reply text |
+| `check_session` | Emits workspace validation and provisioning status |
+| `searching` | Signals activation of the RAG search agent |
+| `sources` | Streams individual citation links retrieved during search |
+| `search_not_required` | Indicates the search agent determined external data was unnecessary |
+| `reasoning_chunk` | Streams incremental tokens from the Think reasoning models |
+| `content_chunk` | Streams incremental tokens for the final assistant response |
 
-## Core modules
+## Core Platform Modules
 
-### `main_manager.py`
+### `main_manager.py` (Session & Persistence Lifecycle)
 
-Session and message persistence.
+Responsible for executing the core business logic of data persistence and context management.
 
-- **`GenMan`** — Creates sessions, loads conversation context for the LLM, saves turns, and lists sessions. Applies system instructions based on Think/Search flags.
-- **`Man`** — Extends `GenMan` to load full conversation records (including thought and source fields) for the UI.
+- **`GenMan`** — Provisions workspaces, constructs LLM context windows, persists conversational turns, and catalogs active sessions. Dynamically injects system instructions based on active feature toggles (Think/Search).
+- **`Man`** — Extends `GenMan` capabilities to securely rehydrate full conversational records (including internal reasoning traces and source citations) for the frontend client.
 
-Each session uses a dedicated SQLite table named after its session ID.
+Workspaces are securely partitioned using dedicated tables mapped to the globally unique session ID.
 
-### `search_agent.py`
+### `search_agent.py` (Orchestration & RAG)
 
-Orchestrates tool-calling when Search mode is enabled. The model selects from registered search tools; results are structured and passed to the main completion as system context with citation rules.
+Manages autonomous tool-calling when the Search tier feature is requested. The LLM evaluates registered tools and dispatches requests; retrieved data is structured and injected into the primary generation pipeline with strict citation mandates.
 
-Tool schemas are loaded from `app/server/json/tools.json`.
+Agent capabilities are defined in the schema registry at `app/server/json/tools.json`.
 
-### `search/search.py`
+### `search/search.py` (External Data Acquisition)
 
-Implements web search and page extraction:
+Executes the physical acquisition of external data for the RAG pipeline:
 
-- DuckDuckGo text and news queries
-- Page scraping via trafilatura
-- Optional keyword filtering with spaCy
-- Section-based extraction for long documents
+- Proxies DuckDuckGo queries for text and news data.
+- Executes distributed page scraping via `trafilatura`.
+- Leverages `spaCy` NLP models for semantic keyword filtering.
+- Implements section-based extraction algorithms for processing long-form documents.
 
-Exposed to the model through `build_search_tools()`.
+These capabilities are securely exposed to the inference models via `build_search_tools()`.
 
 ### `assets.py`
 
-Utility for reading random placeholder comments from `chat_comment.db` (reserved for future UI use).
-
-### `model_response.py`
-
-Legacy alternate API layout. The active production path is `server.py`.
+Utility class for dynamically injecting localized placeholder content from `chat_comment.db` into the UI.
 
 ### `utills/utills.py`
 
-Shared helpers for file logging and debug serialization.
+Shared infrastructure utilities for standardized telemetry, logging, and debug serialization.
 
-## Environment variables
+## Platform Environment Configuration
 
-Configured via `.env`:
+Runtime configurations managed via `.env`:
 
-| Variable | Purpose |
+| Variable | System Purpose |
 |----------|-------------|
-| `BASE_URL` | OpenAI-compatible API base URL |
-| `API_KEY` | Authentication key |
-| `RESONNING_MODEL` | Model when GeepThink is enabled |
-| `NON_RESONNING_MODEL` | Default model |
+| `BASE_URL` | Upstream OpenAI-compatible inference endpoint |
+| `API_KEY` | Upstream authentication secret |
+| `RESONNING_MODEL` | Specified model identifier for Think premium reasoning |
+| `NON_RESONNING_MODEL` | Default model identifier for standard inference |
 
-## Session naming
+## Automated Workspace Contextualization
 
-When a new session is created, `session_name_gen()` requests a short title from the LLM based on the first user message. On API failure, the title defaults to `"New Chat"`.
+Upon workspace creation, the `session_name_gen()` async worker requests a concise, semantic title from the LLM based on the initial customer prompt, ensuring an organized workspace environment. If the upstream provider is degraded, the platform gracefully degrades to a default `"New Chat"` label.

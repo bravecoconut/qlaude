@@ -1,11 +1,17 @@
 /**
- * GeepSeek client application.
+ * Qlaude client application.
  *
- * Manages session list, conversation history, feature toggles, and SSE
- * streaming from the API server (port 5000).
+ * Manages session list, conversation history, feature toggles, SSE
+ * streaming, user authentication state, quota tracking, and error
+ * display from the API server (port 5000).
  */
 
 let active_session = "", think = false, search = false, file = "";
+
+// ── User state (populated from /api/user on load) ───────────────────
+let currentUser = null;
+let currentQuota = null;
+
 
 
 let textArea = () => {
@@ -18,13 +24,13 @@ let textArea = () => {
     const checkInput = () => {
         if (!myTextarea.value.trim()) {
             myDiv.style.pointerEvents = 'none';
-            myDiv.style.color = '#000000';
-            myDiv.style.backgroundColor = '#ffffffb6'
+            myDiv.style.color = '#0000005c';
+            myDiv.style.backgroundColor = '#0000001e'
             myDiv.style.opacity = '0.5';
         } else {
             myDiv.style.pointerEvents = 'auto';
-            myDiv.style.color = '#000000';
-            myDiv.style.backgroundColor = '#ffffff'
+            myDiv.style.color = '#ffffff';
+            myDiv.style.backgroundColor = '#e75913af'
             myDiv.style.opacity = '1';
         }
 
@@ -42,6 +48,137 @@ let textArea = () => {
 }
 
 
+// ── Fetch current user info & quota ─────────────────────────────────
+
+async function fetchUserInfo() {
+    try {
+        const res = await fetch("/api/user");
+        if (!res.ok) {
+            if (res.status === 401 || res.status === 302) {
+                window.location.href = "/login";
+                return;
+            }
+            throw new Error(`HTTP ${res.status}`);
+        }
+        const data = await res.json();
+
+        if (data.error) {
+            console.error("[USER] Error:", data.error);
+            return;
+        }
+
+        currentUser = data.user;
+        currentQuota = data.quota;
+
+        // Update the global user ID for chat requests
+        window.CURRENT_USER_ID = currentUser.id;
+
+        updateUserUI();
+        updateQuotaUI();
+        updateFeatureGating();
+
+    } catch (e) {
+        console.error("[USER] Failed to fetch user info:", e);
+    }
+}
+
+function updateUserUI() {
+    if (!currentUser) return;
+
+    const planLabel = document.getElementById("user-menu-plan");
+    if (planLabel) {
+        const planNames = { free: "Free plan", basic: "Basic plan", plus: "Plus plan" };
+        planLabel.textContent = planNames[currentUser.plan] || "Free plan";
+    }
+}
+
+function updateQuotaUI() {
+    if (!currentQuota) return;
+
+    const used = currentQuota.used || 0;
+    const limit = currentQuota.limit;
+    const isUnlimited = limit === -1;
+
+    // Quota count label
+    const quotaCount = document.getElementById("quota-count");
+    if (quotaCount) {
+        quotaCount.textContent = isUnlimited ? `${used} / ∞` : `${used} / ${limit}`;
+    }
+
+    // Quota bar fill
+    const quotaBar = document.getElementById("quota-bar-fill");
+    if (quotaBar) {
+        if (isUnlimited) {
+            quotaBar.style.width = "0%";
+            quotaBar.style.background = "#3fb299";
+        } else {
+            const pct = Math.min((used / limit) * 100, 100);
+            quotaBar.style.width = pct + "%";
+            if (pct >= 90) {
+                quotaBar.style.background = "#ef4444";
+            } else if (pct >= 70) {
+                quotaBar.style.background = "#f59e0b";
+            } else {
+                quotaBar.style.background = "#3fb299";
+            }
+        }
+    }
+}
+
+function updateFeatureGating() {
+    if (!currentQuota) return;
+
+    const thinkBtn = document.getElementById("geepthink_funtion_button");
+    const searchBtn = document.getElementById("search_funtion_button");
+
+    if (thinkBtn) {
+        if (!currentQuota.think_allowed) {
+            thinkBtn.classList.add("feature-locked");
+            thinkBtn.title = "Upgrade to Basic or Plus to use GeepThink";
+        } else {
+            thinkBtn.classList.remove("feature-locked");
+            thinkBtn.title = "";
+        }
+    }
+
+    if (searchBtn) {
+        if (!currentQuota.search_allowed) {
+            searchBtn.classList.add("feature-locked");
+            searchBtn.title = "Upgrade to Basic or Plus to use Search";
+        } else {
+            searchBtn.classList.remove("feature-locked");
+            searchBtn.title = "";
+        }
+    }
+}
+
+
+// ── Error toast system ──────────────────────────────────────────────
+
+function showErrorToast(message, type = "error", duration = 6000) {
+    const container = document.getElementById("error-toast-container");
+    if (!container) return;
+
+    const toast = document.createElement("div");
+    toast.className = `error-toast error-toast-${type}`;
+    toast.innerHTML = `
+        <div class="toast-content">
+            <span class="toast-icon">${type === "error" ? "⚠️" : type === "quota" ? "⚡" : ""}</span>
+            <span class="toast-message">${marked.parse(message)}</span>
+        </div>
+        <button class="toast-close" onclick="this.parentElement.remove()">✕</button>
+    `;
+
+    container.appendChild(toast);
+
+    // Auto-remove
+    setTimeout(() => {
+        if (toast.parentElement) {
+            toast.classList.add("toast-fade-out");
+            setTimeout(() => toast.remove(), 300);
+        }
+    }, duration);
+}
 
 
 class UIMAN {
@@ -92,6 +229,14 @@ class UIMAN {
 
     /** Toggle extended reasoning (GeepThink) mode. */
     think_toggle() {
+        // Block if feature is locked
+        if (currentQuota && !currentQuota.think_allowed) {
+            showErrorToast(
+                "**GeepThink** is available on Basic and Plus plans. [Upgrade now](/pricing).",
+                "locked"
+            );
+            return;
+        }
 
         if (think == false) {
             think = true
@@ -99,8 +244,8 @@ class UIMAN {
 
         let think_button = document.getElementById('geepthink_funtion_button')
         if (think) {
-            think_button.style.border = "1px solid #ffffff"
-            think_button.style.color = "#ffffff"
+            think_button.style.border = "1px solid #000000"
+            think_button.style.color = "#000000"
         } else {
             think_button.style.border = ""
             think_button.style.color = ""
@@ -112,6 +257,14 @@ class UIMAN {
 
     /** Toggle web search mode. */
     search_toggle() {
+        // Block if feature is locked
+        if (currentQuota && !currentQuota.search_allowed) {
+            showErrorToast(
+                "**Search** is available on Basic and Plus plans. [Upgrade now](/pricing).",
+                "locked"
+            );
+            return;
+        }
 
         if (search == false) {
             search = true
@@ -119,8 +272,8 @@ class UIMAN {
 
         let search_button = document.getElementById('search_funtion_button')
         if (search) {
-            search_button.style.border = "1px solid #ffffff"
-            search_button.style.color = "#ffffff"
+            search_button.style.border = "1px solid #000000"
+            search_button.style.color = "#000000"
 
         } else {
             search_button.style.border = ""
@@ -128,6 +281,30 @@ class UIMAN {
 
         }
         console.log("search", search);
+    }
+
+    /** Toggle the user dropdown menu. */
+    toggleUserMenu() {
+        const menu = document.getElementById("user-menu");
+        if (!menu) return;
+        menu.classList.toggle("hide-element");
+    }
+
+    /** Show upgrade modal with custom message. */
+    showUpgradeModal(title, message) {
+        const modal = document.getElementById("upgrade-modal");
+        const modalTitle = document.getElementById("upgrade-modal-title");
+        const modalMsg = document.getElementById("upgrade-modal-message");
+
+        if (modalTitle) modalTitle.textContent = title || "Upgrade your plan";
+        if (modalMsg) modalMsg.innerHTML = message || "Upgrade to continue chatting.";
+        if (modal) modal.classList.remove("hide-element");
+    }
+
+    /** Close upgrade modal. */
+    closeUpgradeModal() {
+        const modal = document.getElementById("upgrade-modal");
+        if (modal) modal.classList.add("hide-element");
     }
 
     setting_man_manu() {
@@ -138,11 +315,20 @@ class UIMAN {
 
 uiman = new UIMAN()
 
+// Close user menu when clicking outside
+document.addEventListener("click", (e) => {
+    const menu = document.getElementById("user-menu");
+    const profile = document.getElementById("user-profile-section");
+    if (menu && profile && !menu.contains(e.target) && !profile.contains(e.target)) {
+        menu.classList.add("hide-element");
+    }
+});
+
 
 class SessionMan {
     /** Fetch all sessions from the API. */
     async load_all_sessions_pairs() {
-        const res = await fetch("http://127.0.0.1:5000/api/sessions");
+        const res = await fetch("/api/sessions");
         this.sessionPairs = await res.json();
         return this.sessionPairs;
     }
@@ -150,8 +336,8 @@ class SessionMan {
     /** Render session names in the sidebar, newest first. */
     list_sessions_in_cat() {
         console.log(this.sessionPairs);
-    if (!this.sessionPairs || typeof this.sessionPairs !== 'object') return;
-    const cat_element = document.getElementById('cat');
+        if (!this.sessionPairs || typeof this.sessionPairs !== 'object') return;
+        const cat_element = document.getElementById('cat');
         cat_element.innerHTML = ""
 
         // Sort by most recently updated
@@ -187,7 +373,14 @@ class ConversationMan {
     }
 
     async load_conversations() {
-        const res = await fetch(`http://127.0.0.1:5000/api/load_conversation_on_session_id?session_id=${active_session}`)
+        const res = await fetch(`/api/load_conversation_on_session_id?session_id=${active_session}`)
+        if (!res.ok) {
+            if (res.status === 403) {
+                window.location.href = "/chat/new";
+                return {};
+            }
+            throw new Error(`HTTP ${res.status}`);
+        }
         const data = await res.json();
         this.conversation_of_active_session = data.conversation
         return this.conversation_of_active_session
@@ -267,12 +460,15 @@ class ConversationMan {
                     document.getElementById(model_id).innerHTML += `
                         <div class="response" id="response-${now}">${marked.parse(model_content)}</div>
                     `
+                    document.getElementById(`response-${now}`).querySelectorAll('pre code').forEach(hljs.highlightElement);
                 }
             }
 
 
 
         }
+
+        conversation_container.scrollTop = conversation_container.scrollHeight;
 
 
     }
@@ -294,10 +490,24 @@ class SendMan {
         const userInput = input.value.trim();
         if (!userInput) return;
 
-        const res = await fetch("http://localhost:5000/chat", {
+        // Pre-flight quota check on the client side
+        if (currentQuota && !currentQuota.allowed) {
+            uiman.showUpgradeModal(
+                "Daily limit reached",
+                `You've used all ${currentQuota.limit} messages for today on the <strong>${currentQuota.plan}</strong> plan.`
+            );
+            return;
+        }
+
+        const res = await fetch("/api/chat", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ "session_id": active_session, "user_input": userInput, "think": think, "search": search }),
+            body: JSON.stringify({
+                "session_id": active_session,
+                "user_input": userInput,
+                "think": think,
+                "search": search,
+            }),
         });
 
         const reader = res.body.getReader();
@@ -359,6 +569,45 @@ class SendMan {
 
                 try {
                     const payload = JSON.parse(line.slice(6));
+                    conversation_container.scrollTop = conversation_container.scrollHeight;
+
+                    // ── Handle server errors (quota, feature lock) ──
+                    if (payload.error) {
+                        const errorType = payload.error_type || "error";
+
+                        if (errorType === "quota_exceeded") {
+                            uiman.showUpgradeModal(
+                                "Daily limit reached",
+                                marked.parse(payload.error)
+                            );
+                        } else if (errorType === "feature_locked") {
+                            showErrorToast(payload.error, "locked");
+                        } else {
+                            showErrorToast(payload.error, "error");
+                        }
+
+                        // Update local quota state
+                        if (payload.quota) {
+                            currentQuota = { ...currentQuota, ...payload.quota };
+                            updateQuotaUI();
+                        }
+
+                        // Remove the empty model response placeholder
+                        const responseDiv = document.getElementById(`response-${now}`);
+                        if (responseDiv && responseDiv.parentElement) {
+                            responseDiv.parentElement.remove();
+                        }
+                        continue;
+                    }
+
+                    // ── Handle quota updates after successful response ──
+                    if (payload.quota_update) {
+                        currentQuota = { ...currentQuota, ...payload.quota_update };
+                        updateQuotaUI();
+                        updateFeatureGating();
+                        continue;
+                    }
+
                     // console.log("payload keys:", Object.keys(payload)); // ✅ add this
                     if (payload.check_session) {
                         console.log("check_session value:", JSON.stringify(payload.check_session));
@@ -396,6 +645,7 @@ class SendMan {
                         fullThought += payload.reasoning_chunk;
                         const thoughtContent = document.getElementById(`thoughts-content-${now}`)
                         if (thoughtContent) thoughtContent.innerHTML = marked.parse(fullThought);
+                        thoughtContent.querySelectorAll('pre code').forEach(hljs.highlightElement);
                     }
 
                     if (payload.searching) {
@@ -453,6 +703,7 @@ class SendMan {
                         fullContent += payload.content_chunk;
                         const responseDiv = document.getElementById(`response-${now}`)
                         if (responseDiv) responseDiv.innerHTML = marked.parse(fullContent);
+                        responseDiv.querySelectorAll('pre code').forEach(hljs.highlightElement);
                     }
 
                     if (payload.search_not_required) {
@@ -469,6 +720,8 @@ class SendMan {
 const sendMan = new SendMan();
 
 document.addEventListener("DOMContentLoaded", async () => {
+    // Fetch user info first (populates quota + feature gates)
+    await fetchUserInfo();
     await get_all_sessions_pairs();
 
     if (SESSION_ID_FROM_URL && SESSION_ID_FROM_URL !== "None" && SESSION_ID_FROM_URL !== "new") {

@@ -1,4 +1,4 @@
-"""Generate OpenAI-compatible tool schemas for GeepSeek search functions.
+"""Generate OpenAI-compatible tool schemas for Qlaude search functions.
 
 Run this module to regenerate app/server/json/tools.json.
 """

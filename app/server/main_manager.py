@@ -1,18 +1,14 @@
-"""Session and conversation persistence for GeepSeek.
+"""Session and conversation persistence for Qlaude.
 
 Manages SQLite storage for chat messages, session metadata, and
-context assembly for LLM requests.
+context assembly for LLM requests.  Sessions are scoped per user.
 """
 
 import sqlite3
 from datetime import datetime
 from pathlib import Path
-import json
 
-from openai import OpenAI
-from markdown import markdown
 from dotenv import load_dotenv
-import os
 import pytz
 
 now = datetime.now(pytz.timezone("Asia/Kolkata"))
@@ -20,6 +16,7 @@ now = datetime.now(pytz.timezone("Asia/Kolkata"))
 load_dotenv()
 
 BASE_DIR = Path(__file__).resolve().parent
+SESSION_INFO_SCHEMA = BASE_DIR.parent.parent / "sql" / "session_info.sql"
 
 
 class GenMan:
@@ -33,6 +30,9 @@ class GenMan:
         user_input="",
         file_path="",
         model="gemini-2.5-flash",
+        user_id=None,
+        database_path=None,
+        session_info_path=None,
     ):
         self.think = think
         self.search = search
@@ -42,11 +42,18 @@ class GenMan:
         self.user_input = user_input
         self.file_path = file_path
         self.model = model
+        self.user_id = user_id
 
-        self.api_key = "AIzaSyCfioIDHSTocnfXPXwvAdtoECBxXotGIsQ"
-
-        self.database = BASE_DIR.parent / "data" / "database.db"
-        self.session_info = BASE_DIR.parent / "data" / "session_info.db"
+        self.database = (
+            Path(database_path)
+            if database_path
+            else BASE_DIR.parent / "data" / "database.db"
+        )
+        self.session_info = (
+            Path(session_info_path)
+            if session_info_path
+            else BASE_DIR.parent / "data" / "session_info.db"
+        )
 
         self.now = datetime.now()
 
@@ -66,17 +73,79 @@ class GenMan:
         4. never ask user to enable any toggle if query doesn't required realtime update or thining, such for normal greetings.
         """
 
+        self._ensure_session_schema()
+
     def get_db(self, path):
         """Open a SQLite connection with WAL mode for concurrent reads."""
         connect = sqlite3.connect(path, timeout=10)
         connect.execute("PRAGMA journal_mode=WAL")
         return connect
 
+    def _ensure_session_schema(self):
+        """Ensure session metadata table exists and has user_id column."""
+        connect = self.get_db(self.session_info)
+        cursor = connect.cursor()
+
+        cursor.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='info'"
+        )
+        if not cursor.fetchone():
+            with open(SESSION_INFO_SCHEMA, "r") as f:
+                connect.executescript(f.read())
+        else:
+            cursor.execute("PRAGMA table_info(info)")
+            columns = {row[1] for row in cursor.fetchall()}
+            if "user_id" not in columns:
+                cursor.execute("ALTER TABLE info ADD COLUMN user_id INTEGER")
+
+        connect.commit()
+        connect.close()
+
+    def session_belongs_to_user(self, session_id=None, user_id=None):
+        """Return True when the session is owned by the given user."""
+        session_id = session_id or self.session
+        user_id = user_id if user_id is not None else self.user_id
+        if user_id is None:
+            return False
+
+        connect = self.get_db(self.session_info)
+        cursor = connect.cursor()
+        cursor.execute(
+            "SELECT user_id FROM info WHERE session_id = ?", (session_id,)
+        )
+        row = cursor.fetchone()
+        connect.close()
+
+        if not row:
+            return False
+        return row[0] == user_id
+
+    def count_user_sessions(self, user_id=None):
+        """Count sessions owned by a user."""
+        user_id = user_id if user_id is not None else self.user_id
+        if user_id is None:
+            return 0
+
+        connect = self.get_db(self.session_info)
+        cursor = connect.cursor()
+        cursor.execute(
+            "SELECT COUNT(*) FROM info WHERE user_id = ?", (user_id,)
+        )
+        count = cursor.fetchone()[0]
+        connect.close()
+        return count
+
     def check_session(self):
         """Ensure the session table exists; create one and register metadata if new."""
         from server import session_name_gen
 
-        connect = connect = self.get_db(self.database)
+        if self.user_id is None:
+            return {
+                "error": "Authentication required",
+                "error_type": "auth_required",
+            }
+
+        connect = self.get_db(self.database)
         cursor = connect.cursor()
 
         result = {}
@@ -85,8 +154,14 @@ class GenMan:
         exist = cursor.fetchone()
         connect.close()
 
-        if not exist:
-            connect = connect = self.get_db(self.database)
+        if exist:
+            if not self.session_belongs_to_user(self.session, self.user_id):
+                return {
+                    "error": "Session not found or access denied",
+                    "error_type": "session_forbidden",
+                }
+        else:
+            connect = self.get_db(self.database)
             cursor = connect.cursor()
 
             cursor.execute(f"""
@@ -102,14 +177,16 @@ class GenMan:
             connect.commit()
             connect.close()
 
-            connect = sqlite3.connect(self.session_info)
+            connect = self.get_db(self.session_info)
             cursor = connect.cursor()
 
             session_name = session_name_gen(self.user_input)
 
             cursor.execute(
-                "INSERT INTO info (session_id, session_name, date_created, date_last_commit) VALUES(?,?,?,?)",
-                (self.session, session_name, f"{self.now}", f"{self.now}"),
+                """INSERT INTO info
+                   (session_id, session_name, date_created, date_last_commit, user_id)
+                   VALUES (?,?,?,?,?)""",
+                (self.session, session_name, f"{self.now}", f"{self.now}", self.user_id),
             )
 
             connect.commit()
@@ -133,7 +210,7 @@ class GenMan:
             {"role": "system", "content": self.system_instructions},
         ]
 
-        connect = connect = self.get_db(self.database)
+        connect = self.get_db(self.database)
         cursor = connect.cursor()
 
         cursor.execute(f"SELECT * FROM {self.session}")
@@ -153,7 +230,7 @@ class GenMan:
 
     def save_into_session(self, data):
         """Persist a single message and update the session last-modified timestamp."""
-        connect = connect = self.get_db(self.database)
+        connect = self.get_db(self.database)
         cursor = connect.cursor()
 
         cursor.execute(
@@ -164,22 +241,26 @@ class GenMan:
         connect.commit()
         connect.close()
 
-        connect = sqlite3.connect(self.session_info)
+        connect = self.get_db(self.session_info)
         cursor = connect.cursor()
 
         cursor.execute(
-            f"UPDATE info SET date_last_commit = ? WHERE session_id = ?",
-            (f"{self.now}", self.session),
+            "UPDATE info SET date_last_commit = ? WHERE session_id = ? AND user_id = ?",
+            (f"{self.now}", self.session, self.user_id),
         )
 
         connect.commit()
         connect.close()
 
-    def all_session(self):
-        """Return all sessions keyed by ID with names and timestamps."""
+    def all_session(self, user_id=None):
+        """Return sessions owned by the given user."""
+        user_id = user_id if user_id is not None else self.user_id
+        if user_id is None:
+            return {}
+
         session_pairs = {}
 
-        connect = connect = self.get_db(self.database)
+        connect = self.get_db(self.database)
         cursor = connect.cursor()
 
         cursor.execute("SELECT name FROM sqlite_schema WHERE type = 'table'")
@@ -189,10 +270,10 @@ class GenMan:
         connect.commit()
         connect.close()
 
-        connect = sqlite3.connect(self.session_info)
+        connect = self.get_db(self.session_info)
         cursor = connect.cursor()
 
-        cursor.execute("SELECT * FROM info")
+        cursor.execute("SELECT * FROM info WHERE user_id = ?", (user_id,))
 
         rowws = cursor.fetchall()
 
@@ -215,16 +296,27 @@ class GenMan:
 class Man(GenMan):
     """Extended session manager that loads full records for UI display."""
 
-    def __init__(self, session):
-        super().__init__(session=session)
+    def __init__(self, session, user_id=None, database_path=None, session_info_path=None):
+        super().__init__(
+            session=session,
+            user_id=user_id,
+            database_path=database_path,
+            session_info_path=session_info_path,
+        )
         self.session = session
         self.session_conversation = {}
 
     def load_conversation(self):
         """Return all messages for the session, including thought and source fields."""
+        if self.user_id is None:
+            return {"error": "Authentication required"}
+
+        if not self.session_belongs_to_user(self.session, self.user_id):
+            return {"error": "Session not found or access denied"}
+
         contents_list = []
 
-        connect = connect = self.get_db(self.database)
+        connect = self.get_db(self.database)
         cursor = connect.cursor()
 
         cursor.execute(f"SELECT * FROM {self.session}")

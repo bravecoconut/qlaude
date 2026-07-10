@@ -1,59 +1,63 @@
 # Architecture Overview
 
-GeepSeek is a two-tier application: a Flask web client serves the UI, and a separate Flask API handles inference, search, and persistence.
+Qlaude operates on a modern, decoupled SaaS architecture. It utilizes a frontend web application for user interactions and a separate, high-performance API backend handling AI inference, search integrations, user authentication, and billing.
 
-## Directory layout
+## Directory Layout
 
 | Path | Purpose |
 |------|---------|
-| `app/client/` | Web UI (templates, static assets, routing) |
-| `app/server/` | REST API, session management, search agent, LLM integration |
-| `app/data/` | SQLite databases for conversations and session metadata |
-| `sql/` | Initial database schemas |
-| `logs/` | Application log output |
-| `assets/` | README and documentation images |
+| `app/client/` | Frontend web service (templates, static assets, UI routing, billing portal integrations) |
+| `app/server/` | Core REST API, session management, RAG search agent, subscription quota enforcement |
+| `app/data/` | Data persistence layer (user accounts, session metadata, chat histories) |
+| `sql/` | Database schemas and migrations |
+| `logs/` | System monitoring and telemetry output |
+| `assets/` | Documentation assets |
 
-## Components
+## Core Services
 
-### Client (`app/client/`)
+### Frontend Client (`app/client/`)
 
-Serves HTML and static assets on port **5001**. The browser communicates with the API on port **5000** for sessions, history, and chat streaming.
+Serves the customer-facing HTML and static assets (port **5001**). It orchestrates the user experience, integrating with Google OAuth for identity and Stripe Checkout for subscription upgrades, while seamlessly communicating with the core API for chat streaming.
 
-### Server (`app/server/`)
+### Core API (`app/server/`)
 
-Runs on port **5000**. Responsibilities include:
+The backend microservice (port **5000**) powers the platform's intelligence and business logic:
 
-- Session lifecycle and conversation storage
-- Optional web search via the search agent
-- Streaming chat completions through an OpenAI-compatible client
-- Automatic session title generation for new conversations
+- Multi-tenant session lifecycle and conversation storage
+- Subscription quota enforcement and feature gating
+- Real-time web search orchestration (Search Agent)
+- Streaming chat completions via SSE (Server-Sent Events)
+- Automated session contextualization
 
-### Data layer (`app/data/`)
+### Data Layer (`app/data/`)
 
-Three SQLite databases store chat messages, session metadata, and optional UI comments. Each chat session maps to a dedicated message table keyed by session ID.
+Our scalable data layer manages multiple SQLite databases optimized for concurrent workloads. It handles user profiles, subscription states, daily usage quotas, and isolated message histories for data privacy.
 
-## Request flow
+## Request Flow
 
 ```
-Browser (port 5001)
+Customer Browser
     │
-    ├─► GET  /api/sessions
-    ├─► GET  /api/load_conversation_on_session_id
-    └─► POST /chat  (SSE stream)
+    ├─► GET  /auth/google (Identity provider)
+    ├─► GET  /api/sessions (Load workspace)
+    ├─► POST /stripe/create-checkout (Subscription upgrades)
+    └─► POST /chat  (SSE AI stream)
             │
+            ├─► Quota & Feature Authorization
             ├─► [Search enabled]  search_agent → web tools
-            ├─► LLM completion (streamed)
-            └─► Persist user + assistant messages
+            ├─► LLM completion (streamed reasoning and content)
+            └─► Persist interaction data and update usage limits
 ```
 
-1. The user opens a chat page; the client loads session list and history from the API.
-2. On send, the client POSTs to `/chat` with session ID, message, and feature flags.
-3. If Search is on, the search agent retrieves web content before the main model responds.
-4. The server streams reasoning and content chunks as SSE events.
-5. Completed turns are written to SQLite.
+1. The customer authenticates and loads their active session workspace.
+2. Messages sent to `/chat` are first validated against the user's active subscription tier (Free, Basic, Plus).
+3. If Search is active and authorized, the search agent queries external sources before inference.
+4. The API streams real-time reasoning (Think) and final responses back to the client.
+5. Turns and usage metrics are securely recorded.
 
-## Design principles
+## Architectural Principles
 
-- **Separation of concerns** — UI and API run as independent processes.
-- **Local-first persistence** — No external database required for development.
-- **Provider agnostic** — Any OpenAI-compatible endpoint can serve as the model backend.
+- **Microservice Separation** — The frontend client and core API scale independently.
+- **Data Privacy & Tenant Isolation** — Conversations are isolated in dedicated session structures.
+- **Subscription-First** — Deep Stripe integration ensures quotas and billing are handled seamlessly at the API edge.
+- **Provider Agnostic** — Inference requests can be routed to any compatible LLM backend depending on load and tier requirements.

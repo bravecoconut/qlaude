@@ -1,4 +1,4 @@
-"""Legacy alternate API routes for GeepSeek.
+"""Legacy alternate API routes for Qlaude.
 
 The primary production entry point is server.py. This module retains an
 earlier request/response pattern for reference.
